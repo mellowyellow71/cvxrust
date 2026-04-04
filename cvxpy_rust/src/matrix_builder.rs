@@ -67,49 +67,63 @@ pub fn build_matrix_internal(
     let should_parallelize =
         lin_ops.len() >= PARALLEL_MIN_CONSTRAINTS && estimated_nnz >= PARALLEL_MIN_WORK;
 
-    let tensors = if should_parallelize {
-        process_constraints_parallel(lin_ops, &row_offsets, &ctx)
+    let combined = if should_parallelize {
+        process_constraints_parallel(
+            lin_ops,
+            &row_offsets,
+            &ctx,
+            estimated_nnz,
+            total_rows,
+        )
     } else {
-        process_constraints_sequential(lin_ops, &row_offsets, &ctx)
+        process_constraints_sequential(
+            lin_ops,
+            &row_offsets,
+            &ctx,
+            estimated_nnz,
+            total_rows,
+        )
     };
 
-    // Combine all tensors
-    let combined = SparseTensor::combine(tensors);
-
-    // Convert to output format
-    let output_shape = (total_rows, (var_length + 1) as usize);
-    let tensor_with_shape = SparseTensor {
-        shape: output_shape,
-        ..combined
-    };
-
-    BuildMatrixResult::from_tensor(tensor_with_shape, param_size_plus_one as usize)
+    BuildMatrixResult::from_tensor(combined, param_size_plus_one as usize)
 }
 
-/// Process constraints sequentially
+/// Process constraints sequentially into a single pre-allocated output buffer.
+///
+/// Instead of creating N separate SparseTensors and combining them at the end,
+/// this extends a single buffer directly, eliminating intermediate allocations
+/// and the final combine copy.
 fn process_constraints_sequential(
     lin_ops: &[LinOp],
     row_offsets: &[i64],
     ctx: &ProcessingContext,
-) -> Vec<SparseTensor> {
-    lin_ops
-        .iter()
-        .zip(row_offsets.iter())
-        .map(|(lin_op, &row_offset)| {
-            let mut tensor = process_linop(lin_op, ctx);
-            tensor.offset_rows_in_place(row_offset);
-            tensor
-        })
-        .collect()
+    estimated_total_nnz: usize,
+    total_rows: usize,
+) -> SparseTensor {
+    let mut combined = SparseTensor::with_capacity(
+        (total_rows, ctx.var_length as usize + 1),
+        estimated_total_nnz,
+    );
+
+    for (lin_op, &row_offset) in lin_ops.iter().zip(row_offsets.iter()) {
+        let mut tensor = process_linop(lin_op, ctx);
+        tensor.offset_rows_in_place(row_offset);
+        combined.extend(tensor);
+    }
+
+    combined
 }
 
-/// Process constraints in parallel using rayon
+/// Process constraints in parallel using rayon, then combine into pre-allocated buffer.
 fn process_constraints_parallel(
     lin_ops: &[LinOp],
     row_offsets: &[i64],
     ctx: &ProcessingContext,
-) -> Vec<SparseTensor> {
-    lin_ops
+    estimated_total_nnz: usize,
+    total_rows: usize,
+) -> SparseTensor {
+    // Process in parallel — each thread returns its own tensor
+    let tensors: Vec<SparseTensor> = lin_ops
         .par_iter()
         .zip(row_offsets.par_iter())
         .map(|(lin_op, &row_offset)| {
@@ -117,7 +131,17 @@ fn process_constraints_parallel(
             tensor.offset_rows_in_place(row_offset);
             tensor
         })
-        .collect()
+        .collect();
+
+    // Combine into pre-allocated buffer
+    let mut combined = SparseTensor::with_capacity(
+        (total_rows, ctx.var_length as usize + 1),
+        estimated_total_nnz,
+    );
+    for tensor in tensors {
+        combined.extend(tensor);
+    }
+    combined
 }
 
 #[cfg(test)]

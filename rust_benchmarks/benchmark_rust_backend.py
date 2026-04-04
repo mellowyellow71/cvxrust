@@ -158,6 +158,18 @@ def make_sparse_lp(n: int, m: int, density: float = 0.01) -> Callable[[], cp.Pro
     return factory
 
 
+def make_least_squares(n: int, m: int) -> Callable[[], cp.Problem]:
+    """Least squares problem: minimize 0.5 * ||Ax - b||^2 with n variables and m samples."""
+    def factory():
+        x = cp.Variable(n)
+        A = np.random.randn(m, n)
+        b = np.random.randn(m)
+
+        obj = cp.Minimize(0.5 * cp.sum_squares(A @ x - b))
+        return cp.Problem(obj)
+    return factory
+
+
 def make_lasso(n: int, m: int) -> Callable[[], cp.Problem]:
     """LASSO problem with n features and m samples."""
     def factory():
@@ -380,6 +392,10 @@ def main():
         "Sparse LP (n=100, m=50)", make_sparse_lp(100, 50), backends
     )
 
+    all_results["least_squares_small"] = run_benchmark(
+        "Least squares (n=50, m=100)", make_least_squares(50, 100), backends
+    )
+
     all_results["lasso_small"] = run_benchmark(
         "LASSO (n=50, m=100)", make_lasso(50, 100), backends
     )
@@ -395,6 +411,10 @@ def main():
 
     all_results["sparse_lp_medium"] = run_benchmark(
         "Sparse LP (n=1000, m=500)", make_sparse_lp(1000, 500), backends
+    )
+
+    all_results["least_squares_medium"] = run_benchmark(
+        "Least squares (n=200, m=500)", make_least_squares(200, 500), backends
     )
 
     all_results["lasso_medium"] = run_benchmark(
@@ -420,6 +440,10 @@ def main():
 
     all_results["sparse_lp_large"] = run_benchmark(
         "Sparse LP (n=5000, m=2000)", make_sparse_lp(5000, 2000), backends, iterations=3
+    )
+
+    all_results["least_squares_large"] = run_benchmark(
+        "Least squares (n=500, m=2000)", make_least_squares(500, 2000), backends, iterations=3
     )
 
     all_results["lasso_large"] = run_benchmark(

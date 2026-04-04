@@ -13,11 +13,12 @@ mod matrix_builder;
 mod operations;
 mod tensor;
 
-use numpy::{PyArray1, ToPyArray};
+use numpy::{PyArray1, PyReadonlyArray1, ToPyArray};
 use pyo3::prelude::*;
+use pyo3::types::PyTuple;
 use std::collections::HashMap;
 
-use crate::linop::LinOp;
+use crate::linop::{DeserializationContext, LinOp};
 use crate::matrix_builder::build_matrix_internal;
 
 /// Build the coefficient matrix from LinOp trees.
@@ -75,6 +76,65 @@ fn build_matrix<'py>(
     Ok((data, (rows, cols), shape))
 }
 
+/// Build the coefficient matrix from pre-serialized LinOp data.
+///
+/// This avoids per-node Python attribute access by accepting pre-flattened data
+/// from Python's serialize_linop_trees(). The bulk array data (float_data, int_data)
+/// is passed as NumPy arrays for zero-copy access.
+///
+/// # Arguments
+/// * `nodes` - Pre-order list of node tuples: (op_type_int, shape, num_args, data_tag, payload, has_data_linop)
+/// * `float_data` - Contiguous buffer of all float data (dense arrays, sparse values)
+/// * `int_data` - Contiguous buffer of all int data (sparse indices, indptr)
+/// * Other args same as build_matrix
+#[pyfunction]
+fn build_matrix_serialized<'py>(
+    py: Python<'py>,
+    nodes: Vec<Bound<'py, PyTuple>>,
+    float_data: PyReadonlyArray1<f64>,
+    int_data: PyReadonlyArray1<i64>,
+    param_size_plus_one: i64,
+    id_to_col: HashMap<i64, i64>,
+    param_to_size: HashMap<i64, i64>,
+    param_to_col: HashMap<i64, i64>,
+    var_length: i64,
+) -> PyResult<(
+    Py<PyArray1<f64>>,
+    (Py<PyArray1<i64>>, Py<PyArray1<i64>>),
+    (i64, i64),
+)> {
+    // Get numpy array slices (zero-copy view into Python memory)
+    let float_slice = float_data.as_slice()?;
+    let int_slice = int_data.as_slice()?;
+
+    // Deserialize LinOp trees from the pre-order stream
+    let mut deser_ctx = DeserializationContext::new(&nodes, float_slice, int_slice);
+    let mut rust_lin_ops = Vec::new();
+    while deser_ctx.cursor < nodes.len() {
+        rust_lin_ops.push(deser_ctx.read_linop()?);
+    }
+
+    // Build the matrix (release GIL during computation)
+    let result = py.detach(|| {
+        build_matrix_internal(
+            &rust_lin_ops,
+            param_size_plus_one,
+            &id_to_col,
+            &param_to_size,
+            &param_to_col,
+            var_length,
+        )
+    });
+
+    // Convert to numpy arrays
+    let data = result.data.to_pyarray(py).into();
+    let rows = result.rows.to_pyarray(py).into();
+    let cols = result.cols.to_pyarray(py).into();
+    let shape = (result.shape.0 as i64, result.shape.1 as i64);
+
+    Ok((data, (rows, cols), shape))
+}
+
 /// Test function for debugging module loading
 #[pyfunction]
 fn test_function() -> String {
@@ -85,6 +145,7 @@ fn test_function() -> String {
 #[pymodule]
 fn cvxpy_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(build_matrix_serialized, m)?)?;
     m.add_function(wrap_pyfunction!(test_function, m)?)?;
 
     // Add version info

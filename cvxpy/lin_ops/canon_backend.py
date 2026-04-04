@@ -678,6 +678,141 @@ class PythonCanonBackend(CanonBackend):
         pass  # noqa
 
 
+# Op type string -> int mapping for serialization (must match OpType::from_int in Rust)
+_OP_TYPE_MAP = {
+    "variable": 0, "scalar_const": 1, "dense_const": 2, "sparse_const": 3,
+    "param": 4, "sum": 5, "neg": 6, "reshape": 7, "mul": 8, "rmul": 9,
+    "mul_elem": 10, "div": 11, "index": 12, "transpose": 13, "promote": 14,
+    "broadcast_to": 15, "hstack": 16, "vstack": 17, "concatenate": 18,
+    "sum_entries": 19, "trace": 20, "diag_vec": 21, "diag_mat": 22,
+    "upper_tri": 23, "conv": 24, "kron_r": 25, "kron_l": 26, "no_op": 27,
+}
+
+# Op types whose data field is itself a LinOp tree
+_LINOP_DATA_OPS = {"mul", "rmul", "mul_elem", "div", "conv", "kron_l", "kron_r"}
+
+
+def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
+    """
+    Serialize a list of LinOp trees into flat buffers for the Rust backend.
+
+    Walks the trees in pre-order and packs:
+    - nodes: list of tuples (op_type_int, shape, num_args, data_tag, payload, has_data_linop)
+    - float_data: np.ndarray[f64] with all dense array / sparse value data concatenated
+    - int_data: np.ndarray[i64] with all sparse indices / indptr data concatenated
+
+    Data tags:
+      0=None, 1=Int, 2=Float, 3=DenseArray, 4=SparseArray,
+      5=Slices, 6=LinOpRef(placeholder), 7=AxisData, 8=ConcatAxis
+    """
+    nodes: list[tuple] = []
+    float_chunks: list[np.ndarray] = []
+    int_chunks: list[np.ndarray] = []
+    float_offset = 0
+    int_offset = 0
+
+    def _serialize_node(lin_op):
+        nonlocal float_offset, int_offset
+
+        op_type_int = _OP_TYPE_MAP[lin_op.type]
+        shape = tuple(lin_op.shape)
+        num_args = len(lin_op.args)
+        has_data_linop = lin_op.type in _LINOP_DATA_OPS and lin_op.data is not None
+
+        # Determine data tag and payload
+        if lin_op.data is None:
+            data_tag, payload = 0, None
+
+        elif lin_op.type in ("variable", "param"):
+            data_tag, payload = 1, int(lin_op.data)
+
+        elif lin_op.type == "scalar_const":
+            data_tag, payload = 2, float(lin_op.data)
+
+        elif lin_op.type == "dense_const":
+            arr = np.asarray(lin_op.data, dtype=np.float64)
+            flat = arr.ravel(order='F')
+            float_chunks.append(flat)
+            payload = (float_offset, len(flat), tuple(arr.shape))
+            float_offset += len(flat)
+            data_tag = 3
+
+        elif lin_op.type == "sparse_const":
+            csc = sp.csc_array(lin_op.data)
+            vals = np.asarray(csc.data, dtype=np.float64)
+            indices = np.asarray(csc.indices, dtype=np.int64)
+            indptr = np.asarray(csc.indptr, dtype=np.int64)
+            float_chunks.append(vals)
+            int_chunks.append(indices)
+            int_chunks.append(indptr)
+            payload = (
+                float_offset, len(vals),
+                int_offset, len(indices),
+                int_offset + len(indices), len(indptr),
+                csc.shape[0], csc.shape[1],
+            )
+            float_offset += len(vals)
+            int_offset += len(indices) + len(indptr)
+            data_tag = 4
+
+        elif lin_op.type == "index":
+            slices = [(s.start, s.stop, s.step) for s in lin_op.data]
+            data_tag, payload = 5, slices
+
+        elif lin_op.type in _LINOP_DATA_OPS:
+            # Data is a LinOp — serialized inline after this node, before args
+            data_tag, payload = 6, None
+
+        elif lin_op.type in ("diag_vec", "diag_mat"):
+            data_tag, payload = 1, int(lin_op.data)
+
+        elif lin_op.type == "sum_entries":
+            axis = lin_op.data[0]
+            keepdims = bool(lin_op.data[1]) if len(lin_op.data) > 1 else False
+            data_tag, payload = 7, (axis, keepdims)
+
+        elif lin_op.type == "transpose":
+            if lin_op.data is not None and len(lin_op.data) > 0:
+                axes = lin_op.data[0]
+                data_tag, payload = 7, (axes, False)
+            else:
+                data_tag, payload = 0, None
+
+        elif lin_op.type == "concatenate":
+            axis = lin_op.data[0] if lin_op.data else None
+            data_tag, payload = 8, axis
+
+        else:
+            data_tag, payload = 0, None
+
+        nodes.append((op_type_int, shape, num_args, data_tag, payload,
+                       1 if has_data_linop else 0))
+
+        # If data is a LinOp, serialize it BEFORE args
+        if has_data_linop:
+            _serialize_node(lin_op.data)
+
+        # Serialize args in order
+        for arg in lin_op.args:
+            _serialize_node(arg)
+
+    for lin_op in lin_ops:
+        _serialize_node(lin_op)
+
+    # Concatenate buffers
+    if float_chunks:
+        float_data = np.concatenate(float_chunks)
+    else:
+        float_data = np.empty(0, dtype=np.float64)
+
+    if int_chunks:
+        int_data = np.concatenate(int_chunks)
+    else:
+        int_data = np.empty(0, dtype=np.int64)
+
+    return nodes, float_data, int_data
+
+
 class RustCanonBackend(CanonBackend):
     """
     Rust canonicalization backend using PyO3 bindings to cvxpy_rust.
@@ -696,12 +831,18 @@ class RustCanonBackend(CanonBackend):
     def build_matrix(self, lin_ops: list[LinOp]) -> sp.csc_array:
         import cvxpy_rust
         self.id_to_col[-1] = self.var_length
-        (data, (row, col), shape) = cvxpy_rust.build_matrix(lin_ops,
-                                                            self.param_size_plus_one,
-                                                            self.id_to_col,
-                                                            self.param_to_size,
-                                                            self.param_to_col,
-                                                            self.var_length)
+
+        # Use serialized path for bulk data transfer
+        nodes, float_data, int_data = serialize_linop_trees(lin_ops)
+        (data, (row, col), shape) = cvxpy_rust.build_matrix_serialized(
+            nodes, float_data, int_data,
+            self.param_size_plus_one,
+            self.id_to_col,
+            self.param_to_size,
+            self.param_to_col,
+            self.var_length,
+        )
+
         self.id_to_col.pop(-1)
         return sp.csc_array((data, (row, col)), shape)
 

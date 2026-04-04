@@ -370,23 +370,23 @@ impl BuildMatrixResult {
     ///
     /// The output matrix has shape (total_rows * (var_length + 1), param_size_plus_one)
     /// where the tensor is flattened in column-major (Fortran) order.
-    pub fn from_tensor(tensor: SparseTensor, num_param_slices: usize) -> Self {
+    ///
+    /// Consumes the tensor and reuses its `rows` Vec in-place to avoid an extra allocation.
+    pub fn from_tensor(mut tensor: SparseTensor, num_param_slices: usize) -> Self {
         let (n_rows, n_cols) = tensor.shape;
         let output_rows = n_rows * n_cols;
         let output_cols = num_param_slices;
+        let n_rows_i64 = n_rows as i64;
 
-        // Convert 3D COO to 2D COO
+        // Convert 3D COO to 2D COO in-place
         // Output row = col * n_rows + row (column-major flattening)
-        let flat_rows: Vec<i64> = tensor
-            .rows
-            .iter()
-            .zip(tensor.cols.iter())
-            .map(|(&r, &c)| c * (n_rows as i64) + r)
-            .collect();
+        for i in 0..tensor.rows.len() {
+            tensor.rows[i] = tensor.cols[i] * n_rows_i64 + tensor.rows[i];
+        }
 
         BuildMatrixResult {
             data: tensor.data,
-            rows: flat_rows,
+            rows: tensor.rows,
             cols: tensor.param_offsets,
             shape: (output_rows, output_cols),
         }

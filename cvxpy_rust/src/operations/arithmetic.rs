@@ -11,7 +11,6 @@ use crate::tensor::SparseTensor;
 use std::sync::Arc;
 
 /// Process negation operation
-///
 /// Negates all values in the tensor: (A, b) -> (-A, -b)
 pub fn process_neg(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     if lin_op.args.is_empty() {
@@ -34,6 +33,8 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         return SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1));
     }
 
+    let profile = std::env::var("CVXPY_RUST_PROFILE").as_deref() == Ok("1");
+
     // Get the constant data (lhs)
     let lhs_linop = match &lin_op.data {
         LinOpData::LinOpRef(inner) => inner.as_ref(),
@@ -51,10 +52,36 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     }
 
     // Get constant data tensor
+    let t0 = if profile { Some(std::time::Instant::now()) } else { None };
     let lhs_data = get_constant_matrix_data(lhs_linop, Some(ctx));
+    let extract_ms = t0.map(|t| t.elapsed().as_secs_f64() * 1000.0);
 
     // Perform block diagonal multiplication
-    multiply_block_diagonal(&lhs_data, &rhs, lin_op, ctx, false)
+    let t1 = if profile { Some(std::time::Instant::now()) } else { None };
+    let result = multiply_block_diagonal(&lhs_data, &rhs, lin_op, ctx, false);
+    let multiply_ms = t1.map(|t| t.elapsed().as_secs_f64() * 1000.0);
+
+    if profile {
+        let (kind, lhs_rows, lhs_cols) = match &lhs_data {
+            ConstantMatrix::Scalar(_) => ("scalar", 1, 1),
+            ConstantMatrix::DenseColMajor { rows, cols, .. } => ("dense", *rows, *cols),
+            ConstantMatrix::DenseRowMajor { rows, cols, .. } => ("dense", *rows, *cols),
+            ConstantMatrix::Sparse { rows, cols, .. } => ("sparse", *rows, *cols),
+        };
+        let n_blocks = if lhs_cols > 0 { rhs.shape.0 / lhs_cols } else { 0 };
+        eprintln!(
+            "[cvxpy_rust] process_mul: extract={:.3}ms, multiply={:.3}ms ({} {}x{}, {} block{})",
+            extract_ms.unwrap_or(0.0),
+            multiply_ms.unwrap_or(0.0),
+            kind,
+            lhs_rows,
+            lhs_cols,
+            n_blocks,
+            if n_blocks == 1 { "" } else { "s" },
+        );
+    }
+
+    result
 }
 
 /// Process right multiplication: arg @ data

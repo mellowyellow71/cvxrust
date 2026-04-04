@@ -8,17 +8,19 @@ This crate converts CVXPY's LinOp expression trees into sparse coefficient matri
 
 ## Performance
 
-The Rust backend is **1.25-1.5x faster** than both the C++ and SciPy backends for most problem types. It is the default backend for n-dimensional (>2D) problems where C++ is not supported.
+The Rust backend is **1.25-1.5x faster** than both the C++and SciPy backends for most problem types. It is the default backend for n-dimensional (>2D) problems where C++ is not supported.
 
 **Benchmarks** (n=1000, fresh Problem objects each run):
 
-| Problem Type | vs SciPy | vs C++ |
-|-------------|----------|--------|
-| Dense matrix constraints | 1.43x faster | 1.42x faster |
-| sum_squares objective | 1.25x faster | 1.26x faster |
-| Many small constraints | 2.33x faster | 1.35x faster |
-| SOC (norm) objective | 1.49x faster | 1.36x faster |
-| Sparse matrix (1% density) | ~equal | ~equal |
+
+| Problem Type               | vs SciPy     | vs C++       |
+| -------------------------- | ------------ | ------------ |
+| Dense matrix constraints   | 1.43x faster | 1.42x faster |
+| sum_squares objective      | 1.25x faster | 1.26x faster |
+| Many small constraints     | 2.33x faster | 1.35x faster |
+| SOC (norm) objective       | 1.49x faster | 1.36x faster |
+| Sparse matrix (1% density) | ~equal       | ~equal       |
+
 
 The Rust backend is now the **default** for all problems (not just n-dimensional).
 
@@ -64,6 +66,7 @@ cargo test
 ```
 
 Tests are organized by module:
+
 - `tensor.rs` - SparseTensor creation, manipulation, negation
 - `matrix_builder.rs` - Single/multiple constraints, constants
 - `operations/leaf.rs` - Variable, scalar_const, dense_const
@@ -139,12 +142,79 @@ The GIL is released during the Rust computation (`py.allow_threads()`), allowing
 
 All 22 LinOp types from CVXPY are supported:
 
-| Category | Operations |
-|----------|------------|
-| Leaf | `variable`, `param`, `scalar_const`, `dense_const`, `sparse_const` |
-| Arithmetic | `sum`, `neg`, `mul`, `rmul`, `div`, `mul_elem` |
-| Structural | `transpose`, `reshape`, `index`, `hstack`, `vstack`, `promote` |
+
+| Category    | Operations                                                                              |
+| ----------- | --------------------------------------------------------------------------------------- |
+| Leaf        | `variable`, `param`, `scalar_const`, `dense_const`, `sparse_const`                      |
+| Arithmetic  | `sum`, `neg`, `mul`, `rmul`, `div`, `mul_elem`                                          |
+| Structural  | `transpose`, `reshape`, `index`, `hstack`, `vstack`, `promote`                          |
 | Specialized | `sum_entries`, `trace`, `diag_vec`, `diag_mat`, `upper_tri`, `conv`, `kron_r`, `kron_l` |
+
+
+## Debugging (stepping through Rust from Python)
+
+To hit breakpoints in the Rust extension when Python calls it:
+
+### 1. Build the extension in debug mode
+
+Debug builds keep symbols and disable optimizations so the debugger can step through code.
+
+```bash
+cd cvxpy_rust
+maturin develop
+```
+
+Do **not** use `--release` when debugging. Use `maturin develop --release` again when you want fast runs.
+
+### 2. Option A: VS Code / Cursor with CodeLLDB
+
+1. Install the **CodeLLDB** extension (e.g. `vadimcn.vscode-lldb`).
+2. Use the **"Python → Rust (cvxpy_rust)"** launch config (see `cvxpy_hackathon/.vscode/launch.json`). If the debugger can't find Python, set `"program"` in that config to your interpreter path (e.g. the output of `which python` in your conda env).
+3. Set breakpoints in any `.rs` file (e.g. `lib.rs`, `matrix_builder.rs`, `tensor.rs`).
+4. Start debugging with that config. Run your script; when Python calls into the extension, execution will stop at your Rust breakpoints.
+
+### 3. Option B: LLDB from the command line
+
+Use `rust-lldb` (Rust’s wrapper with pretty-printers) or plain `lldb`.
+
+**Run a Python file:**
+
+```bash
+# From the cvxpy repo directory (or workspace root)
+rust-lldb -- python cvxpy/rust_benchmarks/benchmark_rust_backend.py
+```
+
+**Or run a one-liner:**
+
+```bash
+rust-lldb -- python -c "
+import cvxpy as cp
+x = cp.Variable(5)
+prob = cp.Problem(cp.Minimize(cp.sum_squares(x)), [x >= 0])
+prob.get_problem_data(cp.CLARABEL, canon_backend='RUST')
+"
+```
+
+In the LLDB prompt:
+
+```text
+(lldb) b cvxpy_rust::build_matrix
+(lldb) run
+```
+
+When the breakpoint hits, use `n` (next), `s` (step), `c` (continue), and `frame variable` to inspect state. `rust-lldb` gives better display for Rust types.
+
+### 4. Debug Rust-only logic with cargo
+
+For logic that doesn’t need Python, you can debug the Rust tests:
+
+```bash
+cd cvxpy_rust
+cargo test --no-run
+rust-lldb target/debug/cvxpy_rust-xxx
+# In lldb: b matrix_builder::build_matrix_internal
+# Then: run
+```
 
 ## Dependencies
 
@@ -154,3 +224,4 @@ All 22 LinOp types from CVXPY are supported:
 - `sprs` - Sparse matrix operations
 - `rayon` - Parallel processing
 - `thiserror` - Error handling
+

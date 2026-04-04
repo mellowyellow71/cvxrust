@@ -72,6 +72,18 @@ def benchmark_cold(name: str, problem_code: str, backends: list[str], samples: i
 
 # Problem definitions (code strings for subprocess execution)
 PROBLEMS = {
+    "Least squares (n=50, m=100)": """
+A = np.random.randn(100, 50)
+b = np.random.randn(100)
+x = cp.Variable(50)
+prob = cp.Problem(cp.Minimize(0.5 * cp.sum_squares(A @ x - b)))
+""",
+    "Least squares (n=200, m=500)": """
+A = np.random.randn(500, 200)
+b = np.random.randn(500)
+x = cp.Variable(200)
+prob = cp.Problem(cp.Minimize(0.5 * cp.sum_squares(A @ x - b)))
+""",
     "LASSO (n=50, m=100)": """
 A = np.random.randn(100, 50)
 b = np.random.randn(100)
@@ -116,7 +128,7 @@ def main():
               python quick_benchmark.py                    # Run all benchmarks
               python quick_benchmark.py --backends RUST SCIPY  # Compare only RUST and SCIPY
               python quick_benchmark.py --samples 20       # More samples for accuracy
-              python quick_benchmark.py --problems LASSO   # Only LASSO problems
+              python quick_benchmark.py --problems "Least squares"  # Only least squares
         """)
     )
     parser.add_argument(
@@ -149,6 +161,7 @@ def main():
 
     # Group problems by category
     categories = {
+        "Least Squares": [k for k in problems if "Least squares" in k],
         "LASSO Problems": [k for k in problems if "LASSO" in k],
         "Dense QP": [k for k in problems if "QP" in k],
         "Many Constraints": [k for k in problems if "constraints" in k],
