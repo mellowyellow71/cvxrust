@@ -8,7 +8,7 @@ mod leaf;
 mod specialized;
 mod structural;
 
-use crate::linop::{LinOp, OpType};
+use crate::linop::{LinOp, LinOpData, OpType};
 use crate::tensor::SparseTensor;
 use std::collections::HashMap;
 
@@ -93,6 +93,106 @@ pub fn process_linop(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 
         // No-op
         OpType::NoOp => SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1)),
+    }
+}
+
+/// Count the exact number of non-zeros a LinOp tree will produce.
+///
+/// This is the "structure pass" of the two-pass build: it walks the tree
+/// doing the same dispatch as `process_linop` but only counts entries,
+/// without allocating tensors or computing values.  The count is used to
+/// pre-allocate the output buffer with exact capacity.
+pub fn count_nnz(lin_op: &LinOp, ctx: &ProcessingContext) -> usize {
+    match lin_op.op_type {
+        // — Leaf nodes: exact counts —
+        OpType::Variable => lin_op.size(),
+        OpType::ScalarConst => match &lin_op.data {
+            LinOpData::Float(v) if *v == 0.0 => 0,
+            LinOpData::Int(v) if *v == 0 => 0,
+            _ => 1,
+        },
+        OpType::DenseConst => match &lin_op.data {
+            LinOpData::DenseArray { data, .. } => data.iter().filter(|&&x| x != 0.0).count(),
+            _ => lin_op.size(),
+        },
+        OpType::SparseConst => match &lin_op.data {
+            LinOpData::SparseArray { data, .. } => data.iter().filter(|&&x| x != 0.0).count(),
+            _ => lin_op.size(),
+        },
+        OpType::Param => lin_op.size(),
+
+        // — Pass-through ops: output nnz == arg nnz —
+        OpType::Neg | OpType::Reshape | OpType::Div | OpType::Transpose => {
+            lin_op.args.first().map_or(0, |a| count_nnz(a, ctx))
+        }
+
+        // — Aggregation ops: nnz preserved (rows remapped, not removed) —
+        OpType::SumEntries | OpType::Trace | OpType::DiagVec
+        | OpType::DiagMat | OpType::UpperTri => {
+            lin_op.args.first().map_or(0, |a| count_nnz(a, ctx))
+        }
+
+        // — Combining ops: sum of children —
+        OpType::Sum | OpType::Hstack | OpType::Vstack | OpType::Concatenate => {
+            lin_op.args.iter().map(|a| count_nnz(a, ctx)).sum()
+        }
+
+        // — Index: upper bound = arg nnz (selecting rows can only reduce) —
+        OpType::Index => lin_op.args.first().map_or(0, |a| count_nnz(a, ctx)),
+
+        // — Promote / BroadcastTo: nnz multiplied by broadcast factor —
+        OpType::Promote | OpType::BroadcastTo => {
+            let arg_nnz = lin_op.args.first().map_or(0, |a| count_nnz(a, ctx));
+            let arg_size = lin_op.args.first().map_or(1, |a| a.size().max(1));
+            let output_size = lin_op.size();
+            // broadcast factor = output_size / arg_size
+            arg_nnz * (output_size / arg_size).max(1)
+        }
+
+        // — Mul / Rmul: upper bound based on data nnz × num_blocks —
+        OpType::Mul | OpType::Rmul => {
+            let data_nnz = match &lin_op.data {
+                LinOpData::LinOpRef(ref inner) => count_nnz(inner, ctx),
+                _ => lin_op.size(),
+            };
+            let num_blocks = lin_op.args.first()
+                .map_or(1, |a| a.shape.get(1).copied().unwrap_or(1));
+            data_nnz * num_blocks
+        }
+
+        // — MulElem: upper bound = min(arg_nnz, data_nnz * broadcast) —
+        OpType::MulElem => {
+            let arg_nnz = lin_op.args.first().map_or(0, |a| count_nnz(a, ctx));
+            let data_nnz = match &lin_op.data {
+                LinOpData::LinOpRef(ref inner) => count_nnz(inner, ctx),
+                _ => arg_nnz,
+            };
+            // Elementwise mul can't produce more entries than arg has
+            arg_nnz.min(data_nnz * lin_op.size() / lin_op.args.first().map_or(1, |a| a.size().max(1)))
+                .max(arg_nnz) // safety: never less than 0
+        }
+
+        // — Conv: product of data size and arg nnz —
+        OpType::Conv => {
+            let data_size = match &lin_op.data {
+                LinOpData::LinOpRef(ref inner) => inner.size(),
+                _ => 1,
+            };
+            let arg_nnz = lin_op.args.first().map_or(1, |a| count_nnz(a, ctx));
+            data_size * arg_nnz
+        }
+
+        // — Kron: product of data size and arg nnz —
+        OpType::KronR | OpType::KronL => {
+            let data_size = match &lin_op.data {
+                LinOpData::LinOpRef(ref inner) => inner.size(),
+                _ => 1,
+            };
+            let arg_nnz = lin_op.args.first().map_or(1, |a| count_nnz(a, ctx));
+            data_size * arg_nnz
+        }
+
+        OpType::NoOp => 0,
     }
 }
 

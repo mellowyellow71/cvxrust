@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 use crate::linop::LinOp;
-use crate::operations::{process_linop, ProcessingContext};
+use crate::operations::{count_nnz, process_linop, ProcessingContext};
 use crate::tensor::{BuildMatrixResult, SparseTensor, CONSTANT_ID};
 
 /// Minimum number of constraints to consider parallel processing
@@ -59,20 +59,25 @@ pub fn build_matrix_internal(
 
     let total_rows: usize = lin_ops.iter().map(|l| l.size()).sum();
 
-    // Estimate total work (non-zeros) to decide on parallelization
-    let estimated_nnz: usize = lin_ops.iter().map(|l| l.estimate_nnz()).sum();
+    // Phase 1 (structure pass): count exact non-zeros per constraint
+    // for precise pre-allocation and parallelization decisions.
+    let per_constraint_nnz: Vec<usize> = lin_ops
+        .iter()
+        .map(|l| count_nnz(l, &ctx))
+        .collect();
+    let total_nnz: usize = per_constraint_nnz.iter().sum();
 
     // Process constraints (parallel or sequential based on count AND work)
     // Only parallelize if we have enough constraints AND enough work
     let should_parallelize =
-        lin_ops.len() >= PARALLEL_MIN_CONSTRAINTS && estimated_nnz >= PARALLEL_MIN_WORK;
+        lin_ops.len() >= PARALLEL_MIN_CONSTRAINTS && total_nnz >= PARALLEL_MIN_WORK;
 
     let combined = if should_parallelize {
         process_constraints_parallel(
             lin_ops,
             &row_offsets,
             &ctx,
-            estimated_nnz,
+            total_nnz,
             total_rows,
         )
     } else {
@@ -80,7 +85,7 @@ pub fn build_matrix_internal(
             lin_ops,
             &row_offsets,
             &ctx,
-            estimated_nnz,
+            total_nnz,
             total_rows,
         )
     };

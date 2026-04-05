@@ -820,6 +820,11 @@ class RustCanonBackend(CanonBackend):
     This backend provides a ~3x speedup over the C++ backend by implementing
     the matrix building algorithm in Rust with parallel processing via rayon.
 
+    For repeated evaluations of the same problem structure, use
+    ``build_matrix_and_cache`` / ``build_matrix_cached`` directly via
+    ``cvxpy_rust`` to cache the Rust-side LinOp graph and skip
+    Python→Rust extraction on subsequent calls.
+
     Usage:
         prob.solve(canon_backend="RUST")
 
@@ -832,9 +837,11 @@ class RustCanonBackend(CanonBackend):
         import cvxpy_rust
         self.id_to_col[-1] = self.var_length
 
-        # Use serialized path for bulk data transfer
+        # Use serialized path: pre-serialize LinOp trees to flat buffers,
+        # then build the coefficient matrix in Rust with exact NNZ
+        # pre-allocation (two-pass build).
         nodes, float_data, int_data = serialize_linop_trees(lin_ops)
-        (data, (row, col), shape) = cvxpy_rust.build_matrix_serialized(
+        data, (rows, cols), shape = cvxpy_rust.build_matrix_serialized(
             nodes, float_data, int_data,
             self.param_size_plus_one,
             self.id_to_col,
@@ -844,7 +851,46 @@ class RustCanonBackend(CanonBackend):
         )
 
         self.id_to_col.pop(-1)
-        return sp.csc_array((data, (row, col)), shape)
+        return sp.csc_array((data, (rows, cols)), shape=shape)
+
+    @staticmethod
+    def build_matrix_and_cache(
+        lin_ops: list[LinOp],
+        param_size_plus_one: int,
+        id_to_col: dict,
+        param_to_size: dict,
+        param_to_col: dict,
+        var_length: int,
+    ):
+        """Cold path: build matrix AND return a cached Rust-side graph.
+
+        Returns (csc_array, cached_graph).  Pass ``cached_graph`` to
+        ``build_matrix_cached`` for subsequent evaluations without
+        Python→Rust extraction overhead.
+        """
+        import cvxpy_rust
+        id_to_col_copy = dict(id_to_col)
+        id_to_col_copy[-1] = var_length
+        nodes, float_data, int_data = serialize_linop_trees(lin_ops)
+        data, (rows, cols), shape, graph = cvxpy_rust.build_matrix_and_cache(
+            nodes, float_data, int_data,
+            param_size_plus_one,
+            id_to_col_copy,
+            param_to_size,
+            param_to_col,
+            var_length,
+        )
+        return sp.csc_array((data, (rows, cols)), shape=shape), graph
+
+    @staticmethod
+    def build_matrix_cached(cached_graph):
+        """Hot path: rebuild from cached Rust-side graph (no Python extraction).
+
+        Reuses cached results for parameter-free constraints.
+        """
+        import cvxpy_rust
+        data, (rows, cols), shape = cvxpy_rust.build_matrix_cached(cached_graph)
+        return sp.csc_array((data, (rows, cols)), shape=shape)
 
 
 class NumPyCanonBackend(PythonCanonBackend):
