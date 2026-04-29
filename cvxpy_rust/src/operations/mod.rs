@@ -132,7 +132,6 @@ fn process_reshape(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 ///
 /// This is the entry point future Block-aware handlers will recurse into
 /// instead of `process_linop`.
-#[allow(dead_code)] // Wired into handlers in upcoming PRs.
 pub fn process_linop_block(lin_op: &LinOp, ctx: &ProcessingContext) -> NodeValue {
     match lin_op.op_type {
         OpType::Variable => leaf::process_variable_block(lin_op, ctx),
@@ -141,9 +140,14 @@ pub fn process_linop_block(lin_op: &LinOp, ctx: &ProcessingContext) -> NodeValue
         OpType::SparseConst => leaf::process_sparse_const_block(lin_op, ctx),
         OpType::Param => leaf::process_param_block(lin_op, ctx),
 
+        // Index can produce typed Identity/ColPerm output when its input is
+        // typed; this is the lazy path that unlocks the diffengine fast path
+        // for `Mul(A, Index(Variable, ...))` (the LASSO canonicalisation).
+        OpType::Index => structural::process_index_block(lin_op, ctx),
+
         // All other handlers still produce a flat SparseTensor; wrap it as a
         // single COO contribution. Migrating these progressively is the work
-        // of subsequent PRs (Mul/Neg, then structural, then specialized).
+        // of subsequent PRs (Mul/Neg, then remaining structural, then specialized).
         _ => NodeValue::from_coo(process_linop(lin_op, ctx)),
     }
 }

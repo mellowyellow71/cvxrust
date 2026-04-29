@@ -2,7 +2,10 @@
 //!
 //! These operations transform the structure of tensors without arithmetic.
 
-use super::{process_linop, ProcessingContext};
+use std::sync::Arc;
+
+use super::{process_linop, process_linop_block, ProcessingContext};
+use crate::block::{Block, BlockEntry, NodeValue};
 use crate::linop::{AxisSpec, LinOp, LinOpData, SliceData};
 use crate::tensor::SparseTensor;
 
@@ -10,25 +13,135 @@ use crate::tensor::SparseTensor;
 ///
 /// Selects rows from the tensor based on slice indices.
 pub fn process_index(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
+    process_index_block(lin_op, ctx).to_coo()
+}
+
+/// Block-IR variant of `process_index`.
+///
+/// When the input subtree reduces to an `Identity(n)` block, indexing it
+/// returns either an `Identity` (contiguous slice — collapsed back to
+/// `Identity` at a shifted `var_col_offset`) or a `ColPerm` (general row
+/// selection). This is the lazy path that lets `Mul(A, Index(Variable, slice))`
+/// take the diffengine fast path instead of materialising and `select_rows`-ing
+/// an n×n identity tensor.
+///
+/// All other input shapes (Dense / SparseCsc / multi-block / Coo) fall back
+/// to the legacy COO `select_rows` path so behaviour is unchanged for them.
+pub fn process_index_block(lin_op: &LinOp, ctx: &ProcessingContext) -> NodeValue {
+    let var_cols = ctx.var_length as usize + 1;
     if lin_op.args.is_empty() {
-        return SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1));
+        return NodeValue::empty(lin_op.size(), var_cols);
     }
 
-    // Get slice data
     let slices = match &lin_op.data {
         LinOpData::Slices(s) => s,
         _ => panic!("Index operation must have slice data"),
     };
 
-    // Process the argument
-    let tensor = process_linop(&lin_op.args[0], ctx);
-
-    // Compute the row indices to select
     let arg_shape = &lin_op.args[0].shape;
     let row_indices = compute_slice_indices(slices, arg_shape);
+    let out_rows = row_indices.len();
 
-    // Select the rows
-    tensor.select_rows(&row_indices)
+    let inner = process_linop_block(&lin_op.args[0], ctx);
+
+    if let Some(typed) = try_index_typed(&inner, &row_indices, out_rows, var_cols) {
+        return typed;
+    }
+
+    // Fallback: flatten the input and use the legacy select_rows.
+    let tensor = inner.to_coo().select_rows(&row_indices);
+    let mut nv = NodeValue::from_coo(tensor);
+    nv.out_rows = lin_op.size();
+    nv
+}
+
+/// Lazy fast path for `Index` over a single typed block.
+///
+/// Currently only handles `Identity` (the LASSO case) and the trivial
+/// `Zero` block; everything else returns `None` and falls through to the
+/// COO path. Future PRs can add `Dense` (strided view) and `SparseCsc`
+/// (column slice) handlers here.
+fn try_index_typed(
+    inner: &NodeValue,
+    row_indices: &[i64],
+    out_rows: usize,
+    var_cols: usize,
+) -> Option<NodeValue> {
+    if inner.blocks.len() != 1 {
+        return None;
+    }
+    let entry = &inner.blocks[0];
+    let var_col_offset = entry.var_col_offset;
+    let param_slot = entry.param_slot;
+
+    match &entry.block {
+        Block::Zero { .. } => Some(NodeValue {
+            out_rows,
+            var_cols,
+            blocks: vec![BlockEntry {
+                param_slot,
+                var_col_offset,
+                block: Block::Zero {
+                    rows: out_rows,
+                    cols: 0,
+                },
+            }],
+        }),
+
+        Block::Identity { n } => {
+            // Row i of the output is row `row_indices[i]` of the original
+            // identity, i.e. has a single 1 at column `row_indices[i]` of
+            // the variable column space. If `row_indices` is contiguous
+            // [a, a+1, .., a+k-1], the result is just Identity(k) at
+            // var_col_offset + a — preserves the diffengine fast path.
+            // Otherwise it becomes a ColPerm.
+            if let Some(start) = contiguous_start(row_indices) {
+                debug_assert!((start as usize) + out_rows <= *n);
+                Some(NodeValue {
+                    out_rows,
+                    var_cols,
+                    blocks: vec![BlockEntry {
+                        param_slot,
+                        var_col_offset: var_col_offset + start,
+                        block: Block::Identity { n: out_rows },
+                    }],
+                })
+            } else {
+                let perm: Arc<[i64]> = Arc::from(row_indices.to_vec());
+                Some(NodeValue {
+                    out_rows,
+                    var_cols,
+                    blocks: vec![BlockEntry {
+                        param_slot,
+                        var_col_offset,
+                        block: Block::ColPerm { perm, ncols: *n },
+                    }],
+                })
+            }
+        }
+
+        // Dense / SparseCsc / ScaledIdentity / ColPerm / Coo: fall through
+        // to the COO select_rows path. These are correct via the existing
+        // implementation; lazy handlers are future work.
+        _ => None,
+    }
+}
+
+/// Returns `Some(start)` if `idx` is `[start, start+1, ..., start+len-1]`.
+fn contiguous_start(idx: &[i64]) -> Option<i64> {
+    if idx.is_empty() {
+        return Some(0);
+    }
+    let start = idx[0];
+    if idx
+        .iter()
+        .enumerate()
+        .all(|(i, &r)| r == start + i as i64)
+    {
+        Some(start)
+    } else {
+        None
+    }
 }
 
 /// Compute flat row indices from slice specifications
@@ -740,5 +853,155 @@ mod tests {
 
         // Should still have same non-zeros
         assert_eq!(tensor.nnz(), 2);
+    }
+
+    fn make_ctx_offset(var_length: i64, var_col: i64) -> ProcessingContext {
+        // Variable 1 placed at `var_col` so we can verify offset arithmetic.
+        let mut id_to_col = HashMap::new();
+        id_to_col.insert(1, var_col);
+
+        let mut param_to_col = HashMap::new();
+        param_to_col.insert(CONSTANT_ID, 0);
+
+        let mut param_to_size = HashMap::new();
+        param_to_size.insert(CONSTANT_ID, 1);
+
+        ProcessingContext {
+            id_to_col,
+            param_to_col,
+            param_to_size,
+            var_length,
+            param_size_plus_one: 1,
+        }
+    }
+
+    fn variable_1d(size: usize, var_id: i64) -> LinOp {
+        LinOp {
+            op_type: OpType::Variable,
+            shape: vec![size],
+            args: vec![],
+            data: LinOpData::Int(var_id),
+        }
+    }
+
+    #[test]
+    fn test_index_block_contiguous_returns_identity() {
+        // Variable y of size 5 at column 3, sliced [1..4] -> Identity(3) at col 4.
+        let ctx = make_ctx_offset(8, 3);
+        let var = variable_1d(5, 1);
+        let index_op = LinOp {
+            op_type: OpType::Index,
+            shape: vec![3],
+            args: vec![var],
+            data: LinOpData::Slices(vec![SliceData {
+                start: 1,
+                stop: 4,
+                step: 1,
+            }]),
+        };
+
+        let nv = process_index_block(&index_op, &ctx);
+        assert_eq!(nv.blocks.len(), 1);
+        let entry = &nv.blocks[0];
+        assert_eq!(entry.var_col_offset, 4);
+        match &entry.block {
+            Block::Identity { n } => assert_eq!(*n, 3),
+            other => panic!("expected Identity, got {:?}", other),
+        }
+
+        // to_coo() must match the legacy path output exactly.
+        let typed = nv.to_coo();
+        let legacy = process_index(&index_op, &ctx);
+        assert_eq!(typed.data, legacy.data);
+        assert_eq!(typed.rows, legacy.rows);
+        assert_eq!(typed.cols, legacy.cols);
+        assert_eq!(typed.param_offsets, legacy.param_offsets);
+    }
+
+    #[test]
+    fn test_index_block_non_contiguous_returns_colperm() {
+        // Strided slice [0, 2, 4] -> ColPerm.
+        let ctx = make_ctx_offset(6, 0);
+        let var = variable_1d(5, 1);
+        let index_op = LinOp {
+            op_type: OpType::Index,
+            shape: vec![3],
+            args: vec![var],
+            data: LinOpData::Slices(vec![SliceData {
+                start: 0,
+                stop: 5,
+                step: 2,
+            }]),
+        };
+
+        let nv = process_index_block(&index_op, &ctx);
+        assert_eq!(nv.blocks.len(), 1);
+        match &nv.blocks[0].block {
+            Block::ColPerm { perm, ncols } => {
+                assert_eq!(perm.as_ref(), &[0_i64, 2, 4]);
+                assert_eq!(*ncols, 5);
+            }
+            other => panic!("expected ColPerm, got {:?}", other),
+        }
+
+        // Equivalence to legacy path.
+        let typed = nv.to_coo();
+        let legacy = process_index(&index_op, &ctx);
+        assert_eq!(typed.data, legacy.data);
+        assert_eq!(typed.rows, legacy.rows);
+        assert_eq!(typed.cols, legacy.cols);
+    }
+
+    #[test]
+    fn test_index_block_falls_back_to_coo_on_non_typed_input() {
+        // Index over Hstack — Hstack isn't migrated yet, so input is Coo.
+        // Output should be byte-identical to the legacy process_index.
+        let ctx = make_ctx_offset(8, 0);
+        let var1 = variable_1d(2, 1);
+        let var2 = LinOp {
+            op_type: OpType::Variable,
+            shape: vec![2],
+            args: vec![],
+            data: LinOpData::Int(2),
+        };
+        let mut id_to_col = ctx.id_to_col.clone();
+        id_to_col.insert(2, 4);
+        let ctx = ProcessingContext {
+            id_to_col,
+            ..ctx
+        };
+        let stack = LinOp {
+            op_type: OpType::Hstack,
+            shape: vec![4],
+            args: vec![var1, var2],
+            data: LinOpData::None,
+        };
+        let index_op = LinOp {
+            op_type: OpType::Index,
+            shape: vec![2],
+            args: vec![stack],
+            data: LinOpData::Slices(vec![SliceData {
+                start: 1,
+                stop: 3,
+                step: 1,
+            }]),
+        };
+
+        let typed = process_index_block(&index_op, &ctx).to_coo();
+        let legacy = process_index(&index_op, &ctx);
+        assert_eq!(typed.data, legacy.data);
+        assert_eq!(typed.rows, legacy.rows);
+        assert_eq!(typed.cols, legacy.cols);
+        assert_eq!(typed.param_offsets, legacy.param_offsets);
+    }
+
+    #[test]
+    fn test_contiguous_start_helper() {
+        assert_eq!(contiguous_start(&[]), Some(0));
+        assert_eq!(contiguous_start(&[5]), Some(5));
+        assert_eq!(contiguous_start(&[3, 4, 5]), Some(3));
+        assert_eq!(contiguous_start(&[3, 5, 7]), None);
+        assert_eq!(contiguous_start(&[5, 4, 3]), None);
+        assert_eq!(contiguous_start(&[0, 1, 2, 4]), None);
     }
 }

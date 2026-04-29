@@ -5,7 +5,8 @@
 // Allow non-snake-case for matrix math variables like row_in_X
 #![allow(non_snake_case)]
 
-use super::{process_linop, ProcessingContext};
+use super::{process_linop, process_linop_block, ProcessingContext};
+use crate::block::{Block, NodeValue};
 use crate::linop::{LinOp, LinOpData, OpType};
 use crate::tensor::SparseTensor;
 use std::sync::Arc;
@@ -50,8 +51,29 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         }
     }
 
-    // Process the argument (rhs)
-    let rhs = process_linop(&lin_op.args[0], ctx);
+    // Generalised fast path via the Block IR: any RHS subtree that reduces to
+    // a single non-parametric `Identity(n)` block at some `var_col_offset`
+    // takes the same shortcut — emit A's entries directly with column indices
+    // shifted by that offset. Catches `Mul(A, Index(Variable, [a..a+n]))`
+    // (the LASSO canonicalisation) and any other Identity-reducing subtree
+    // that the legacy `as_plain_variable` doesn't recognise.
+    let rhs_block = if !is_parametric(lhs_linop) {
+        let block = process_linop_block(&lin_op.args[0], ctx);
+        if let Some((var_col_offset, n)) = as_typed_identity(&block, ctx) {
+            let lhs_data = get_constant_matrix_data(lhs_linop, Some(ctx));
+            return mul_const_by_identity_offset(lhs_data, var_col_offset, n, lin_op, ctx);
+        }
+        Some(block)
+    } else {
+        None
+    };
+
+    // Process the argument (rhs). Reuse the NodeValue computed above when
+    // available — falling through from the typed probe is free.
+    let rhs = match rhs_block {
+        Some(b) => b.to_coo(),
+        None => process_linop(&lin_op.args[0], ctx),
+    };
 
     // Check if the lhs is parametric (contains Param nodes)
     if is_parametric(lhs_linop) {
@@ -663,15 +685,31 @@ fn mul_const_by_variable(
     lin_op: &LinOp,
     ctx: &ProcessingContext,
 ) -> SparseTensor {
-    let output_rows = lin_op.size();
     let var_col_offset = ctx.var_col(var_id);
+    let n = lin_op.args[0].size();
+    mul_const_by_identity_offset(lhs, var_col_offset, n, lin_op, ctx)
+}
+
+/// Generalised fast path: `Mul(ConstantMatrix, Identity(n)) at var_col_offset`.
+///
+/// Equivalent to `mul_const_by_variable` but takes the variable column offset
+/// and identity width directly, so it works for any RHS subtree that reduces
+/// to a typed `Identity` block — including `Index(Variable, contiguous_slice)`
+/// which the LASSO canonicalisation produces.
+fn mul_const_by_identity_offset(
+    lhs: ConstantMatrix,
+    var_col_offset: i64,
+    n: usize,
+    lin_op: &LinOp,
+    ctx: &ProcessingContext,
+) -> SparseTensor {
+    let output_rows = lin_op.size();
     let param_offset = ctx.const_param();
     let out_shape = (output_rows, ctx.var_length as usize + 1);
 
     match lhs {
         ConstantMatrix::Scalar(s) => {
-            // Scalar * variable: scaled identity, one entry per variable element
-            let n = lin_op.args[0].size();
+            // Scalar * Identity: scaled identity, one entry per variable column.
             let mut result = SparseTensor::with_capacity(out_shape, n);
             if s != 0.0 {
                 for i in 0..n {
@@ -732,6 +770,24 @@ fn mul_const_by_variable(
             }
             result
         }
+    }
+}
+
+/// Returns `Some((var_col_offset, n))` if the NodeValue is a single
+/// non-parametric `Identity(n)` block — the precondition for the diffengine
+/// fast path. Defensive: requires `param_slot == const_param()` so we never
+/// take the fast path when parametric structure has slipped through.
+fn as_typed_identity(nv: &NodeValue, ctx: &ProcessingContext) -> Option<(i64, usize)> {
+    if nv.blocks.len() != 1 {
+        return None;
+    }
+    let entry = &nv.blocks[0];
+    if entry.param_slot != ctx.const_param() {
+        return None;
+    }
+    match &entry.block {
+        Block::Identity { n } => Some((entry.var_col_offset, *n)),
+        _ => None,
     }
 }
 
@@ -1676,5 +1732,122 @@ mod tests {
         // Values should be 1/2 and 1/4
         assert!((tensor.data[0] - 0.5).abs() < 1e-10);
         assert!((tensor.data[1] - 0.25).abs() < 1e-10);
+    }
+
+    /// PR 3 fast path: `Mul(DenseConst, Index(Variable, contiguous_slice))`
+    /// (the LASSO canonicalisation pattern). The new path probes the RHS via
+    /// `process_linop_block`, sees a typed `Identity` at a shifted offset,
+    /// and dispatches to `mul_const_by_identity_offset`. This test verifies
+    /// numerical equivalence to a manual hand-computation.
+    #[test]
+    fn test_mul_with_index_variable_lasso_pattern() {
+        // Variable y of size 5 at column 0. We slice y[1..4] and multiply
+        // by a 3x3 dense matrix:
+        //   A = [[ 1, 2, 3 ]
+        //        [ 4, 5, 6 ]
+        //        [ 7, 8, 9 ]]
+        //
+        // Expected output: row i has A's row i emitted at columns
+        // var_col_offset + col, where var_col_offset = ctx.var_col(1) + 1 = 1.
+        let mut id_to_col = HashMap::new();
+        id_to_col.insert(1, 0);
+
+        let mut param_to_col = HashMap::new();
+        param_to_col.insert(CONSTANT_ID, 0);
+
+        let mut param_to_size = HashMap::new();
+        param_to_size.insert(CONSTANT_ID, 1);
+
+        let ctx = ProcessingContext {
+            id_to_col,
+            param_to_col,
+            param_to_size,
+            var_length: 5,
+            param_size_plus_one: 1,
+        };
+
+        let var = LinOp {
+            op_type: OpType::Variable,
+            shape: vec![5],
+            args: vec![],
+            data: LinOpData::Int(1),
+        };
+        let index = LinOp {
+            op_type: OpType::Index,
+            shape: vec![3],
+            args: vec![var],
+            data: LinOpData::Slices(vec![crate::linop::SliceData {
+                start: 1,
+                stop: 4,
+                step: 1,
+            }]),
+        };
+        // Column-major: (col 0) 1 4 7  (col 1) 2 5 8  (col 2) 3 6 9
+        let dense_a = LinOp {
+            op_type: OpType::DenseConst,
+            shape: vec![3, 3],
+            args: vec![],
+            data: LinOpData::DenseArray {
+                data: Arc::from(vec![1.0, 4.0, 7.0, 2.0, 5.0, 8.0, 3.0, 6.0, 9.0]),
+                shape: vec![3, 3],
+            },
+        };
+        let mul_op = LinOp {
+            op_type: OpType::Mul,
+            shape: vec![3],
+            args: vec![index],
+            data: LinOpData::LinOpRef(Box::new(dense_a)),
+        };
+
+        let tensor = process_mul(&mul_op, &ctx);
+
+        // Expect 9 entries, A's 9 nonzeros placed at cols {1, 2, 3}.
+        // Emission order is col-outer, row-inner (F-order): same as DenseColMajor walk.
+        assert_eq!(tensor.nnz(), 9);
+        assert_eq!(tensor.data, vec![1.0, 4.0, 7.0, 2.0, 5.0, 8.0, 3.0, 6.0, 9.0]);
+        assert_eq!(tensor.cols, vec![1, 1, 1, 2, 2, 2, 3, 3, 3]);
+        assert_eq!(tensor.rows, vec![0, 1, 2, 0, 1, 2, 0, 1, 2]);
+        for &p in &tensor.param_offsets {
+            assert_eq!(p, 0);
+        }
+    }
+
+    /// Sanity: the existing `as_plain_variable` fast path still fires
+    /// byte-for-byte the same as before (Mul of constant against a plain
+    /// Variable), even though the new probe path comes after.
+    #[test]
+    fn test_mul_plain_variable_fast_path_still_fires() {
+        let ctx = make_ctx();
+
+        let var_op = LinOp {
+            op_type: OpType::Variable,
+            shape: vec![4],
+            args: vec![],
+            data: LinOpData::Int(1),
+        };
+        let dense_a = LinOp {
+            op_type: OpType::DenseConst,
+            shape: vec![2, 4],
+            args: vec![],
+            // Column-major 2x4: identity-ish content for easy verification.
+            data: LinOpData::DenseArray {
+                data: Arc::from(vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0]),
+                shape: vec![2, 4],
+            },
+        };
+        let mul_op = LinOp {
+            op_type: OpType::Mul,
+            shape: vec![2],
+            args: vec![var_op],
+            data: LinOpData::LinOpRef(Box::new(dense_a)),
+        };
+
+        let tensor = process_mul(&mul_op, &ctx);
+
+        // 4 nonzeros (the 1.0 entries). Variable starts at col 0, so out_col = col index.
+        assert_eq!(tensor.nnz(), 4);
+        assert_eq!(tensor.data, vec![1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(tensor.rows, vec![0, 1, 0, 1]);
+        assert_eq!(tensor.cols, vec![0, 1, 2, 3]);
     }
 }
