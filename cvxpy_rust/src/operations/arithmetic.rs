@@ -721,9 +721,39 @@ fn mul_const_by_identity_offset(
 
         ConstantMatrix::DenseColMajor { data, rows: a_rows, cols: a_cols } => {
             // data is in column-major layout: data[col * a_rows + row] = A[row, col]
-            // Map each nonzero A[row, col] → output (row, var_col_offset + col, val)
-            let nnz_estimate = data.iter().filter(|&&v| v != 0.0).count();
-            let mut result = SparseTensor::with_capacity(out_shape, nnz_estimate);
+            // Map each nonzero A[row, col] → output (row, var_col_offset + col, val).
+            //
+            // Fully-dense fast path (the common LASSO case where A is a random
+            // gaussian matrix): every entry is non-zero, so we can bulk-fill
+            // each output array instead of doing per-element push calls.
+            // `data` becomes a memcpy; `rows` is the pattern [0..a_rows]
+            // repeated a_cols times; `cols` is each output column repeated
+            // a_rows times; `param_offsets` is a single value × nnz.
+            let total = a_rows * a_cols;
+            let nnz_count = data.iter().filter(|&&v| v != 0.0).count();
+            if nnz_count == total && total > 0 {
+                let mut result_rows: Vec<i64> = Vec::with_capacity(total);
+                let mut result_cols: Vec<i64> = Vec::with_capacity(total);
+                // Build row index pattern [0, 1, .., a_rows-1] once and reuse.
+                let row_pattern: Vec<i64> = (0..a_rows as i64).collect();
+                for col in 0..a_cols {
+                    result_rows.extend_from_slice(&row_pattern);
+                    result_cols
+                        .extend(std::iter::repeat(var_col_offset + col as i64).take(a_rows));
+                }
+                let result_data: Vec<f64> = data.iter().copied().collect();
+                let result_params: Vec<i64> = vec![param_offset; total];
+                return SparseTensor {
+                    shape: out_shape,
+                    data: result_data,
+                    rows: result_rows,
+                    cols: result_cols,
+                    param_offsets: result_params,
+                };
+            }
+
+            // Scalar path: matrix has zeros, skip them per-entry.
+            let mut result = SparseTensor::with_capacity(out_shape, nnz_count);
             for col in 0..a_cols {
                 let out_col = var_col_offset + col as i64;
                 let col_start = col * a_rows;
