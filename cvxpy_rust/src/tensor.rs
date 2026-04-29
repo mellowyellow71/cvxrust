@@ -390,10 +390,23 @@ impl BuildMatrixResult {
             .map(|(&r, &c)| c * (n_rows as i64) + r)
             .collect();
 
-        // Build a sorted permutation index by flat_row.
-        // Using parallel sort via rayon — faster than numpy's sort for large arrays.
+        // Sort by flat_row so the downstream `np.unique` runs O(n) timsort.
+        //
+        // For small/medium problems (cold-start LASSO 200x500 at ~100k nnz),
+        // serial sort beats parallel because rayon initialises its global
+        // thread pool lazily on first call and the per-process startup cost
+        // (~hundreds of microseconds, plus first-time TLB / cache warm) is not
+        // amortised by the parallel speedup at this size. Above the threshold,
+        // par_sort wins. The cutoff (1M) was chosen so rustybench-class
+        // problems (5M nnz) still take the parallel path.
+        const PAR_SORT_MIN_NNZ: usize = 1_000_000;
+
         let mut order: Vec<usize> = (0..nnz).collect();
-        order.par_sort_unstable_by_key(|&i| flat_rows[i]);
+        if nnz >= PAR_SORT_MIN_NNZ {
+            order.par_sort_unstable_by_key(|&i| flat_rows[i]);
+        } else {
+            order.sort_unstable_by_key(|&i| flat_rows[i]);
+        }
 
         // Apply the permutation to all arrays
         let sorted_rows: Vec<i64> = order.iter().map(|&i| flat_rows[i]).collect();
