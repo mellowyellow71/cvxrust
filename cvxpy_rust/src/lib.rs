@@ -124,6 +124,70 @@ fn build_matrix_from_buffer<'py>(
     Ok((data, (rows, cols), shape))
 }
 
+/// Compute the reduction of an already-built COO problem-data tensor.
+///
+/// Mirrors `canonInterface.reduce_problem_data_tensor`. Takes the
+/// `(data, rows, cols, shape)` tuple returned by `build_matrix*` (rows
+/// already monotonically non-decreasing thanks to the `from_tensor`
+/// post-sort), plus `var_length` and `quad_form`, and returns the seven
+/// arrays/scalars `MatrixData.cache()` needs.
+///
+/// Currently NOT wired into `RustCanonBackend.build_matrix` because cvxpy
+/// transforms the csc_array between build and cache (scipy `2 * matrix`
+/// returns a fresh array without our attribute, and rows are no longer
+/// sorted), so the cached ReducedMats see a different matrix than the one
+/// we constructed. Kept in the build because it's correct, tested, and
+/// any future deeper integration (e.g. wrapping the matrix in a subclass
+/// that survives transformations) can call it directly.
+#[pyfunction]
+fn compute_reduction<'py>(
+    py: Python<'py>,
+    data: numpy::PyReadonlyArray1<'_, f64>,
+    rows: numpy::PyReadonlyArray1<'_, i64>,
+    cols: numpy::PyReadonlyArray1<'_, i64>,
+    shape_rows: usize,
+    shape_cols: usize,
+    var_length: usize,
+    quad_form: bool,
+) -> PyResult<(
+    Py<PyArray1<f64>>,
+    Py<PyArray1<i64>>,
+    Py<PyArray1<i64>>,
+    (i64, i64),
+    Py<PyArray1<i64>>,
+    Py<PyArray1<i64>>,
+    (i64, i64),
+)> {
+    // Borrow the numpy buffers directly — no upfront memcpy. The bound
+    // numpy arrays and our PyReadonlyArray guards keep the underlying
+    // memory alive across the GIL release; the slices' lifetime is tied
+    // to those guards, which we capture before `py.detach`.
+    let data_slice = data.as_slice()?;
+    let rows_slice = rows.as_slice()?;
+    let cols_slice = cols.as_slice()?;
+
+    let red = py.detach(|| {
+        crate::tensor::compute_reduction_from_slices(
+            data_slice,
+            rows_slice,
+            cols_slice,
+            (shape_rows, shape_cols),
+            var_length,
+            quad_form,
+        )
+    });
+
+    Ok((
+        red.reduced_data.to_pyarray(py).into(),
+        red.reduced_col_indices.to_pyarray(py).into(),
+        red.reduced_indptr.to_pyarray(py).into(),
+        (red.reduced_shape.0 as i64, red.reduced_shape.1 as i64),
+        red.final_indices.to_pyarray(py).into(),
+        red.final_indptr.to_pyarray(py).into(),
+        (red.final_shape.0 as i64, red.final_shape.1 as i64),
+    ))
+}
+
 /// Test function for debugging module loading
 #[pyfunction]
 fn test_function() -> String {
@@ -135,6 +199,7 @@ fn test_function() -> String {
 fn cvxpy_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(build_matrix_from_buffer, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_reduction, m)?)?;
     m.add_function(wrap_pyfunction!(test_function, m)?)?;
 
     // Add version info

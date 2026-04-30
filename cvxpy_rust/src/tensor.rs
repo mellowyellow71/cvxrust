@@ -366,6 +366,175 @@ pub struct BuildMatrixResult {
     pub shape: (usize, usize),
 }
 
+/// Pre-computed reduction matching `canonInterface.reduce_problem_data_tensor`.
+///
+/// Walking the already-sorted COO output once produces every value the Python
+/// helper would compute via `np.unique` + scipy COO→CSR conversion. Returning
+/// it alongside the raw matrix lets `MatrixData.cache()` skip
+/// `reduce_problem_data_tensor` entirely (~30% of warm wall-clock for LASSO
+/// 200×500 per the cProfile run).
+///
+/// `reduced_*` describe a CSR sparse matrix of shape `reduced_shape`:
+///  - `reduced_data[k]`, `reduced_col_indices[k]` give the value and column of
+///    entry k.
+///  - `reduced_indptr[r]` is the offset into `reduced_data` where row r starts.
+///
+/// `final_indices` / `final_indptr` / `final_shape` are the CSC components of
+/// the eventual problem-data matrix that `MatrixData` stores in
+/// `problem_data_index`.
+#[derive(Debug)]
+pub struct ReducedMatrix {
+    pub reduced_data: Vec<f64>,
+    pub reduced_col_indices: Vec<i64>,
+    pub reduced_indptr: Vec<i64>,
+    pub reduced_shape: (usize, usize),
+    pub final_indices: Vec<i64>,
+    pub final_indptr: Vec<i64>,
+    pub final_shape: (usize, usize),
+}
+
+impl BuildMatrixResult {
+    pub fn compute_reduction(&self, var_length: usize, quad_form: bool) -> ReducedMatrix {
+        compute_reduction_from_slices(
+            &self.data,
+            &self.rows,
+            &self.cols,
+            self.shape,
+            var_length,
+            quad_form,
+        )
+    }
+}
+
+/// Compute the reduction that `reduce_problem_data_tensor` would compute
+/// on `sp.csc_array((data, (rows, cols)), shape)`.
+///
+/// `var_length` is the number of solver variables; `quad_form` matches the
+/// flag passed to `reduce_problem_data_tensor` (true for the quadratic form
+/// matrix P, false for the constraint matrix A).
+///
+/// Assumes `rows` is non-decreasing — i.e., the `from_tensor` post-sort has
+/// already run. That invariant lets us walk the COO once to find unique row
+/// values; both np.unique calls in the Python helper collapse to O(nnz)
+/// linear scans here.
+///
+/// Takes borrowed slices so the Python-side caller can pass numpy buffers
+/// directly without an upfront memcpy.
+pub fn compute_reduction_from_slices(
+    data: &[f64],
+    rows: &[i64],
+    cols: &[i64],
+    shape: (usize, usize),
+    var_length: usize,
+    quad_form: bool,
+) -> ReducedMatrix {
+    let nnz = data.len();
+    let big_m = shape.0;
+    let num_param_slices = shape.1;
+
+        // Pass 1: count non-zero entries (mimics A.eliminate_zeros() in the
+        // Python path) and unique row values.
+        let mut nnz_after_drop: usize = 0;
+        let mut unique_count: usize = 0;
+        let mut last: i64 = i64::MIN;
+        let mut have_seen_any = false;
+        for i in 0..nnz {
+            if data[i] == 0.0 {
+                continue;
+            }
+            nnz_after_drop += 1;
+            if !have_seen_any || rows[i] != last {
+                unique_count += 1;
+                last = rows[i];
+                have_seen_any = true;
+            }
+        }
+
+        // Pass 2: build reduced CSR by walking the same sorted entries.
+        let mut reduced_data: Vec<f64> = Vec::with_capacity(nnz_after_drop);
+        let mut reduced_col_indices: Vec<i64> = Vec::with_capacity(nnz_after_drop);
+        let mut unique_rows: Vec<i64> = Vec::with_capacity(unique_count);
+        // indptr is filled as a running counter — entries[r+1] gets +1 for
+        // each entry we emit in row r. Final cumsum runs at the end.
+        let mut reduced_indptr: Vec<i64> = vec![0; unique_count + 1];
+
+        last = i64::MIN;
+        have_seen_any = false;
+        let mut current_reduced_row: i64 = -1;
+        for i in 0..nnz {
+            if data[i] == 0.0 {
+                continue;
+            }
+            if !have_seen_any || rows[i] != last {
+                current_reduced_row += 1;
+                unique_rows.push(rows[i]);
+                last = rows[i];
+                have_seen_any = true;
+            }
+            reduced_data.push(data[i]);
+            reduced_col_indices.push(cols[i]);
+            reduced_indptr[current_reduced_row as usize + 1] += 1;
+        }
+
+        // Cumsum to turn per-row counts into row-start offsets.
+        for r in 1..reduced_indptr.len() {
+            reduced_indptr[r] += reduced_indptr[r - 1];
+        }
+        debug_assert_eq!(*reduced_indptr.last().unwrap() as usize, nnz_after_drop);
+
+        // CSR validity: scipy expects column indices sorted within each row.
+        // The Python path goes through `tocsr()` which sorts; mirror that.
+        // Per row we typically have very few entries (one per param slot),
+        // so an in-place stable sort per row is fine.
+        for r in 0..unique_count {
+            let start = reduced_indptr[r] as usize;
+            let end = reduced_indptr[r + 1] as usize;
+            if end - start > 1 {
+                let cols_slice = &mut reduced_col_indices[start..end];
+                let data_slice = &mut reduced_data[start..end];
+                // Sort via permutation index since two slices need the same order.
+                let mut perm: Vec<usize> = (0..end - start).collect();
+                perm.sort_unstable_by_key(|&p| cols_slice[p]);
+                let cols_copy: Vec<i64> = perm.iter().map(|&p| cols_slice[p]).collect();
+                let data_copy: Vec<f64> = perm.iter().map(|&p| data_slice[p]).collect();
+                cols_slice.copy_from_slice(&cols_copy);
+                data_slice.copy_from_slice(&data_copy);
+            }
+        }
+
+        let reduced_shape = (unique_count, num_param_slices);
+
+        // Build final problem_data_index (indices, indptr, shape).
+        let n_cols = if quad_form { var_length } else { var_length + 1 };
+        let n_constr = big_m / n_cols;
+        let final_shape = (n_constr, n_cols);
+        let n_constr_i64 = n_constr as i64;
+
+        let mut final_indices: Vec<i64> = Vec::with_capacity(unique_count);
+        // For indptr, count how many unique rows fall into each "col" group.
+        // col = unique_row // n_constr.
+        let mut final_indptr: Vec<i64> = vec![0; n_cols + 1];
+        for &nr in &unique_rows {
+            let col = (nr / n_constr_i64) as usize;
+            let idx = nr % n_constr_i64;
+            final_indices.push(idx);
+            final_indptr[col + 1] += 1;
+        }
+        for r in 1..final_indptr.len() {
+            final_indptr[r] += final_indptr[r - 1];
+        }
+
+    ReducedMatrix {
+        reduced_data,
+        reduced_col_indices,
+        reduced_indptr,
+        reduced_shape,
+        final_indices,
+        final_indptr,
+        final_shape,
+    }
+}
+
 impl BuildMatrixResult {
     /// Create from a SparseTensor by flattening the 3D structure to 2D.
     ///
@@ -458,5 +627,101 @@ mod tests {
         assert_eq!(tensor.data, vec![1.0, 1.0, 1.0]);
         assert_eq!(tensor.rows, vec![0, 1, 2]);
         assert_eq!(tensor.cols, vec![0, 1, 2]);
+    }
+
+    /// Reduction sanity test. Mirrors the simplest case
+    /// `reduce_problem_data_tensor` would handle: a small csc-shaped tensor
+    /// with a few duplicate rows and parameters.
+    ///
+    /// Setup:
+    ///   * The conceptual problem-data matrix has shape (n_constr=3, n_cols=4),
+    ///     so the flattened tensor has big_M = 12 rows.
+    ///   * 5 nonzero entries at flat_rows [0, 0, 5, 5, 11], sorted.
+    ///   * 2 param slices.
+    /// Expected reduced output:
+    ///   * unique_rows = [0, 5, 11] (3 unique rows out of 12)
+    ///   * reduced_indptr = [0, 2, 4, 5]
+    ///   * reduced_col_indices = [0, 1, 0, 1, 0]
+    ///   * final_shape = (3, 4) (quad_form=true uses var_length=4 directly)
+    ///   * final_indices = [0, 5%3=2, 11%3=2]  i.e. [0, 2, 2]
+    ///   * final_indptr per col group: cols = [0, 1, 3] -> col 0:1, col 1:1, col 3:1
+    #[test]
+    fn test_compute_reduction_basic() {
+        let result = BuildMatrixResult {
+            data: vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            rows: vec![0, 0, 5, 5, 11],
+            cols: vec![0, 1, 0, 1, 0],
+            shape: (12, 2),
+        };
+        let red = result.compute_reduction(4, true);
+
+        assert_eq!(red.reduced_data, vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert_eq!(red.reduced_col_indices, vec![0, 1, 0, 1, 0]);
+        assert_eq!(red.reduced_indptr, vec![0, 2, 4, 5]);
+        assert_eq!(red.reduced_shape, (3, 2));
+
+        // n_cols = 4 (quad_form=true), n_constr = 12 / 4 = 3.
+        assert_eq!(red.final_shape, (3, 4));
+        assert_eq!(red.final_indices, vec![0, 2, 2]);
+        // unique_rows / n_constr = [0, 1, 3]; one per group.
+        // indptr is cumsum of [_, 1, 1, 0, 1] = [0, 1, 2, 2, 3].
+        assert_eq!(red.final_indptr, vec![0, 1, 2, 2, 3]);
+    }
+
+    /// `quad_form=false` adds 1 to n_cols. Verifies the n_constr arithmetic.
+    #[test]
+    fn test_compute_reduction_non_quad_form() {
+        // big_M = 6, var_length=2, quad_form=false -> n_cols = 3, n_constr = 2.
+        let result = BuildMatrixResult {
+            data: vec![1.0, 2.0, 3.0],
+            rows: vec![0, 2, 5],
+            cols: vec![0, 0, 0],
+            shape: (6, 1),
+        };
+        let red = result.compute_reduction(2, false);
+        assert_eq!(red.final_shape, (2, 3));
+        // unique_rows = [0, 2, 5]
+        // final_indices = [0%2, 2%2, 5%2] = [0, 0, 1]
+        assert_eq!(red.final_indices, vec![0, 0, 1]);
+        // cols = [0/2, 2/2, 5/2] = [0, 1, 2]
+        // Counts per col: 1, 1, 1 in cols 0,1,2
+        // indptr cumsum on [_, 1, 1, 1] = [0, 1, 2, 3]
+        assert_eq!(red.final_indptr, vec![0, 1, 2, 3]);
+    }
+
+    /// Zero entries must be eliminated, exactly like `A.eliminate_zeros()`.
+    #[test]
+    fn test_compute_reduction_drops_zeros() {
+        let result = BuildMatrixResult {
+            data: vec![1.0, 0.0, 2.0, 0.0, 3.0],
+            rows: vec![0, 0, 5, 5, 11],
+            cols: vec![0, 1, 0, 1, 0],
+            shape: (12, 2),
+        };
+        let red = result.compute_reduction(4, true);
+        // Three non-zero entries at rows {0, 5, 11} -> 3 unique rows still,
+        // but reduced_data has only 3 entries.
+        assert_eq!(red.reduced_data, vec![1.0, 2.0, 3.0]);
+        assert_eq!(red.reduced_col_indices, vec![0, 0, 0]);
+        // Each unique row contributes 1 nonzero -> indptr = [0, 1, 2, 3].
+        assert_eq!(red.reduced_indptr, vec![0, 1, 2, 3]);
+    }
+
+    /// CSR-style within-row column sort: entries within a row are emitted
+    /// sorted by column index.
+    #[test]
+    fn test_compute_reduction_sorts_within_row() {
+        // Single row 0 with entries at cols 5, 1, 3 (out of order).
+        // big_M = 1, var_length = 1, quad_form = true -> n_cols = 1, n_constr = 1.
+        let result = BuildMatrixResult {
+            data: vec![10.0, 20.0, 30.0],
+            rows: vec![0, 0, 0],
+            cols: vec![5, 1, 3],
+            shape: (1, 6),
+        };
+        let red = result.compute_reduction(1, true);
+        assert_eq!(red.reduced_col_indices, vec![1, 3, 5]);
+        // Data values must be permuted along with the cols.
+        assert_eq!(red.reduced_data, vec![20.0, 30.0, 10.0]);
     }
 }
