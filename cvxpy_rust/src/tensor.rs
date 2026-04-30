@@ -50,12 +50,6 @@ impl SparseTensor {
         self.data.len()
     }
 
-    /// Check if the tensor is empty
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
-
     /// Add a single entry to the tensor
     #[inline]
     pub fn push(&mut self, value: f64, row: i64, col: i64, param_offset: i64) {
@@ -91,22 +85,6 @@ impl SparseTensor {
     pub fn offset_rows_in_place(&mut self, offset: i64) {
         for r in &mut self.rows {
             *r += offset;
-        }
-    }
-
-    /// Offset all column indices in place
-    #[allow(dead_code)]
-    pub fn offset_cols_in_place(&mut self, offset: i64) {
-        for c in &mut self.cols {
-            *c += offset;
-        }
-    }
-
-    /// Offset all parameter indices in place
-    #[allow(dead_code)]
-    pub fn offset_params_in_place(&mut self, offset: i64) {
-        for p in &mut self.param_offsets {
-            *p += offset;
         }
     }
 
