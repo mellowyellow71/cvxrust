@@ -3,7 +3,7 @@
 //! This module defines the Rust representation of CVXPY's LinOp nodes
 //! and provides extraction from Python objects via PyO3.
 
-use numpy::{PyArrayDyn, PyUntypedArrayMethods};
+use numpy::{PyArrayDyn, PyArrayMethods, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PySequence, PyTuple};
 use std::fmt;
@@ -11,11 +11,11 @@ use std::sync::Arc;
 
 /// Helper to get item from either a list or tuple
 fn get_sequence_item<'py>(obj: &Bound<'py, PyAny>, index: usize) -> PyResult<Bound<'py, PyAny>> {
-    if let Ok(list) = obj.downcast::<PyList>() {
+    if let Ok(list) = obj.cast::<PyList>() {
         list.get_item(index)
-    } else if let Ok(tuple) = obj.downcast::<PyTuple>() {
+    } else if let Ok(tuple) = obj.cast::<PyTuple>() {
         tuple.get_item(index)
-    } else if let Ok(seq) = obj.downcast::<PySequence>() {
+    } else if let Ok(seq) = obj.cast::<PySequence>() {
         seq.get_item(index)
     } else {
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
@@ -27,11 +27,11 @@ fn get_sequence_item<'py>(obj: &Bound<'py, PyAny>, index: usize) -> PyResult<Bou
 
 /// Helper to get length of list or tuple
 fn get_sequence_len(obj: &Bound<'_, PyAny>) -> PyResult<usize> {
-    if let Ok(list) = obj.downcast::<PyList>() {
+    if let Ok(list) = obj.cast::<PyList>() {
         Ok(list.len())
-    } else if let Ok(tuple) = obj.downcast::<PyTuple>() {
+    } else if let Ok(tuple) = obj.cast::<PyTuple>() {
         Ok(tuple.len())
-    } else if let Ok(seq) = obj.downcast::<PySequence>() {
+    } else if let Ok(seq) = obj.cast::<PySequence>() {
         Ok(seq.len()?)
     } else {
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
@@ -124,8 +124,9 @@ impl OpType {
         }
     }
 
-    /// Check if this is a leaf node type
-    #[allow(dead_code)]
+    /// Check if this is a leaf node type. Used to skip the `args` PyO3
+    /// fetch in `LinOp::from_python`.
+    #[inline]
     pub fn is_leaf(&self) -> bool {
         matches!(
             self,
@@ -192,20 +193,28 @@ pub struct LinOp {
 impl LinOp {
     /// Extract a LinOp tree from a Python object
     pub fn from_python(obj: &Bound<'_, PyAny>) -> PyResult<Self> {
-        // Extract operation type
-        let type_str: String = obj.getattr("type")?.extract()?;
-        let op_type = OpType::from_str(&type_str)?;
+        // Extract op_type via a borrowed PyString — avoids the per-node
+        // String allocation that `extract::<String>()` does.
+        let type_attr = obj.getattr("type")?;
+        let type_pystr = type_attr.cast::<pyo3::types::PyString>()?;
+        let op_type = OpType::from_str(type_pystr.to_str()?)?;
 
         // Extract shape
         let shape: Vec<usize> = obj.getattr("shape")?.extract()?;
 
-        // Extract args recursively
-        let args_list = obj.getattr("args")?;
-        let args_list = args_list.downcast::<PyList>()?;
-        let args: Vec<LinOp> = args_list
-            .iter()
-            .map(|arg| LinOp::from_python(&arg))
-            .collect::<PyResult<Vec<_>>>()?;
+        // Skip the `args` getattr entirely for leaf nodes (Variable, *Const,
+        // Param, NoOp). On a typical LASSO LinOp tree leaves are roughly a
+        // third of all nodes, and each saved getattr is two PyO3 calls.
+        let args = if op_type.is_leaf() {
+            Vec::new()
+        } else {
+            let args_list = obj.getattr("args")?;
+            let args_list = args_list.cast::<PyList>()?;
+            args_list
+                .iter()
+                .map(|arg| LinOp::from_python(&arg))
+                .collect::<PyResult<Vec<_>>>()?
+        };
 
         // Extract data based on operation type
         let data = Self::extract_data(obj, op_type)?;
@@ -329,14 +338,31 @@ impl LinOp {
 
     /// Extract dense numpy array data
     fn extract_dense_array(data_attr: &Bound<'_, PyAny>) -> PyResult<LinOpData> {
-        let arr = data_attr.downcast::<PyArrayDyn<f64>>()?;
+        let arr = data_attr.cast::<PyArrayDyn<f64>>()?;
         let shape: Vec<usize> = arr.shape().to_vec();
-        // CVXPY stores constants in F-order (column-major), so we need to read in F-order.
-        // Call numpy's ravel with order='F' to get flattened data in column-major order.
-        // This handles non-contiguous arrays (views, slices) correctly.
+
+        // Fast path: cvxpy stores its dense constants F-contiguous, so the
+        // underlying buffer is already in the layout we want. Read it
+        // directly via the numpy crate without bouncing through a Python
+        // `ravel("F")` call. This skips a Python attribute lookup + method
+        // dispatch + temporary numpy view per dense constant — small but
+        // it's per-LinOp.
+        if arr.is_fortran_contiguous() {
+            let readonly = arr.readonly();
+            let slice = readonly.as_slice()?;
+            return Ok(LinOpData::DenseArray {
+                data: Arc::from(slice.to_vec()),
+                shape,
+            });
+        }
+
+        // Fallback for non-contiguous numpy views / slices.
         let flat_arr = data_attr.call_method1("ravel", ("F",))?;
         let data: Vec<f64> = flat_arr.extract()?;
-        Ok(LinOpData::DenseArray { data: Arc::from(data), shape })
+        Ok(LinOpData::DenseArray {
+            data: Arc::from(data),
+            shape,
+        })
     }
 
     /// Extract sparse scipy matrix data (assumes CSC format)
