@@ -128,7 +128,7 @@ fn process_reshape(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 /// Block IR (currently: leaves), and wraps the legacy COO output of all other
 /// handlers as a single `Block::Coo` contribution. Behaviourally equivalent to
 /// `process_linop`; the caller can use the typed structure if present (e.g.,
-/// to dispatch a Mul fast path) or just call `.to_coo()` for the flat path.
+/// to dispatch a Mul fast path) or just call `.into_coo()` for the flat path.
 ///
 /// This is the entry point future Block-aware handlers will recurse into
 /// instead of `process_linop`.

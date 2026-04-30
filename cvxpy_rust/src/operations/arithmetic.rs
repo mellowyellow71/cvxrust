@@ -71,7 +71,7 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     // Process the argument (rhs). Reuse the NodeValue computed above when
     // available — falling through from the typed probe is free.
     let rhs = match rhs_block {
-        Some(b) => b.to_coo(),
+        Some(b) => b.into_coo(),
         None => process_linop(&lin_op.args[0], ctx),
     };
 
@@ -739,7 +739,7 @@ fn mul_const_by_identity_offset(
                 for col in 0..a_cols {
                     result_rows.extend_from_slice(&row_pattern);
                     result_cols
-                        .extend(std::iter::repeat(var_col_offset + col as i64).take(a_rows));
+                        .extend(std::iter::repeat_n(var_col_offset + col as i64, a_rows));
                 }
                 let result_data: Vec<f64> = data.iter().copied().collect();
                 let result_params: Vec<i64> = vec![param_offset; total];
@@ -1078,6 +1078,7 @@ fn multiply_block_diagonal_right(
 /// - Input tensor represents vec(X) in column-major order
 /// - Output is vec(X @ A) in column-major order
 /// - The operation is kron(A^T, I_k) @ vec(X)
+///
 /// Direct element-by-element processing with pre-allocated output
 #[inline]
 fn multiply_dense_block_diagonal_right_colmajor(

@@ -13,7 +13,7 @@ use crate::tensor::SparseTensor;
 ///
 /// Selects rows from the tensor based on slice indices.
 pub fn process_index(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
-    process_index_block(lin_op, ctx).to_coo()
+    process_index_block(lin_op, ctx).into_coo()
 }
 
 /// Block-IR variant of `process_index`.
@@ -49,7 +49,7 @@ pub fn process_index_block(lin_op: &LinOp, ctx: &ProcessingContext) -> NodeValue
     }
 
     // Fallback: flatten the input and use the legacy select_rows.
-    let tensor = inner.to_coo().select_rows(&row_indices);
+    let tensor = inner.into_coo().select_rows(&row_indices);
     let mut nv = NodeValue::from_coo(tensor);
     nv.out_rows = lin_op.size();
     nv
@@ -896,8 +896,8 @@ mod tests {
             other => panic!("expected Identity, got {:?}", other),
         }
 
-        // to_coo() must match the legacy path output exactly.
-        let typed = nv.to_coo();
+        // into_coo() must match the legacy path output exactly.
+        let typed = nv.into_coo();
         let legacy = process_index(&index_op, &ctx);
         assert_eq!(typed.data, legacy.data);
         assert_eq!(typed.rows, legacy.rows);
@@ -931,7 +931,7 @@ mod tests {
         }
 
         // Equivalence to legacy path.
-        let typed = nv.to_coo();
+        let typed = nv.into_coo();
         let legacy = process_index(&index_op, &ctx);
         assert_eq!(typed.data, legacy.data);
         assert_eq!(typed.rows, legacy.rows);
@@ -939,7 +939,7 @@ mod tests {
     }
 
     #[test]
-    fn test_index_block_falls_back_to_coo_on_non_typed_input() {
+    fn test_index_block_falls_back_into_coo_on_non_typed_input() {
         // Index over Hstack — Hstack isn't migrated yet, so input is Coo.
         // Output should be byte-identical to the legacy process_index.
         let ctx = make_ctx_offset(8, 0);
@@ -973,7 +973,7 @@ mod tests {
             }]),
         };
 
-        let typed = process_index_block(&index_op, &ctx).to_coo();
+        let typed = process_index_block(&index_op, &ctx).into_coo();
         let legacy = process_index(&index_op, &ctx);
         assert_eq!(typed.data, legacy.data);
         assert_eq!(typed.rows, legacy.rows);

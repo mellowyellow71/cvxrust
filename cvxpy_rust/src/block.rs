@@ -149,7 +149,7 @@ impl NodeValue {
     /// increasing `flat_row = col * out_rows + row`, but across blocks they
     /// are not sorted — `BuildMatrixResult::from_tensor` handles the final
     /// parallel sort, preserving the April 3 sort optimisation.
-    pub fn to_coo(self) -> SparseTensor {
+    pub fn into_coo(self) -> SparseTensor {
         let shape = (self.out_rows, self.var_cols);
         let total = self.estimated_nnz();
         let mut out = SparseTensor::with_capacity(shape, total);
@@ -215,7 +215,7 @@ mod tests {
                 block: Block::Identity { n: 3 },
             }],
         };
-        let t = nv.to_coo();
+        let t = nv.into_coo();
         assert_eq!(t.shape, (3, 7));
         assert_eq!(t.data, vec![1.0, 1.0, 1.0]);
         assert_eq!(t.rows, vec![0, 1, 2]);
@@ -235,7 +235,7 @@ mod tests {
                 block: Block::ColPerm { perm },
             }],
         };
-        let t = nv.to_coo();
+        let t = nv.into_coo();
         assert_eq!(t.data, vec![1.0, 1.0, 1.0]);
         assert_eq!(t.rows, vec![0, 1, 2]);
         // var_col_offset=1, perm=[2,0,1] -> cols=[3,1,2]
@@ -259,7 +259,7 @@ mod tests {
                 block: Block::Dense(dense),
             }],
         };
-        let t = nv.to_coo();
+        let t = nv.into_coo();
         // Expect column-major emission: (col=2,row=0,1.0), (col=2,row=1,2.0),
         //                               (col=3,row=0,3.0), (col=3,row=1,4.0),
         //                               (col=4,row=0,5.0), (col=4,row=1,6.0).
@@ -281,7 +281,7 @@ mod tests {
                 block: Block::Dense(dense),
             }],
         };
-        let t = nv.to_coo();
+        let t = nv.into_coo();
         assert_eq!(t.nnz(), 1);
         assert_eq!(t.data, vec![2.0]);
         assert_eq!(t.rows, vec![1]);
@@ -294,7 +294,7 @@ mod tests {
         t.push(7.0, 1, 2, 0);
         t.push(-3.0, 0, 5, 2);
         let nv = NodeValue::from_coo(t.clone());
-        let back = nv.to_coo();
+        let back = nv.into_coo();
         assert_eq!(back.shape, t.shape);
         assert_eq!(back.data, t.data);
         assert_eq!(back.rows, t.rows);
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn multi_block_concatenates() {
         // Two Identity blocks at different var_col_offsets — emitted as
-        // separate runs in the to_coo output.
+        // separate runs in the into_coo output.
         let nv = NodeValue {
             out_rows: 2,
             var_cols: 4,
@@ -322,7 +322,7 @@ mod tests {
                 },
             ],
         };
-        let t = nv.to_coo();
+        let t = nv.into_coo();
         assert_eq!(t.nnz(), 4);
         assert_eq!(t.data, vec![1.0, 1.0, 1.0, 1.0]);
         assert_eq!(t.rows, vec![0, 1, 0, 1]);

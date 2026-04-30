@@ -8,7 +8,7 @@
 //!   doesn't map cleanly onto a typed block (per-row parameter slots in Param,
 //!   F-order flat-index encoding in SparseConst).
 //! * `process_*(...) -> SparseTensor` — the legacy flat path, now implemented
-//!   as `process_*_block(...).to_coo()`. Output is byte-identical to the
+//!   as `process_*_block(...).into_coo()`. Output is byte-identical to the
 //!   pre-PR-2 version.
 
 use std::sync::Arc;
@@ -50,7 +50,7 @@ pub fn process_variable_block(lin_op: &LinOp, ctx: &ProcessingContext) -> NodeVa
 }
 
 pub fn process_variable(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
-    process_variable_block(lin_op, ctx).to_coo()
+    process_variable_block(lin_op, ctx).into_coo()
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ pub fn process_scalar_const_block(lin_op: &LinOp, ctx: &ProcessingContext) -> No
 }
 
 pub fn process_scalar_const(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
-    process_scalar_const_block(lin_op, ctx).to_coo()
+    process_scalar_const_block(lin_op, ctx).into_coo()
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ pub fn process_dense_const_block(lin_op: &LinOp, ctx: &ProcessingContext) -> Nod
 }
 
 pub fn process_dense_const(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
-    process_dense_const_block(lin_op, ctx).to_coo()
+    process_dense_const_block(lin_op, ctx).into_coo()
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +174,7 @@ pub fn process_sparse_const_block(lin_op: &LinOp, ctx: &ProcessingContext) -> No
 }
 
 pub fn process_sparse_const(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
-    process_sparse_const_block(lin_op, ctx).to_coo()
+    process_sparse_const_block(lin_op, ctx).into_coo()
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ pub fn process_param_block(lin_op: &LinOp, ctx: &ProcessingContext) -> NodeValue
 }
 
 pub fn process_param(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
-    process_param_block(lin_op, ctx).to_coo()
+    process_param_block(lin_op, ctx).into_coo()
 }
 
 #[cfg(test)]
