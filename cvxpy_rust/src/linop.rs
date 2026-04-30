@@ -137,6 +137,82 @@ impl OpType {
                 | OpType::Param
         )
     }
+
+    /// Stable byte encoding for the binary buffer format used by
+    /// `build_matrix_from_buffer`. Numbers are part of the on-the-wire
+    /// protocol — never reorder, only append.
+    pub fn to_byte(self) -> u8 {
+        match self {
+            OpType::Variable => 0,
+            OpType::ScalarConst => 1,
+            OpType::DenseConst => 2,
+            OpType::SparseConst => 3,
+            OpType::Param => 4,
+            OpType::Sum => 5,
+            OpType::Neg => 6,
+            OpType::Reshape => 7,
+            OpType::Mul => 8,
+            OpType::Rmul => 9,
+            OpType::MulElem => 10,
+            OpType::Div => 11,
+            OpType::Index => 12,
+            OpType::Transpose => 13,
+            OpType::Promote => 14,
+            OpType::BroadcastTo => 15,
+            OpType::Hstack => 16,
+            OpType::Vstack => 17,
+            OpType::Concatenate => 18,
+            OpType::SumEntries => 19,
+            OpType::Trace => 20,
+            OpType::DiagVec => 21,
+            OpType::DiagMat => 22,
+            OpType::UpperTri => 23,
+            OpType::Conv => 24,
+            OpType::KronR => 25,
+            OpType::KronL => 26,
+            OpType::NoOp => 27,
+        }
+    }
+
+    /// Decode an op_type from the binary buffer format.
+    pub fn from_byte(b: u8) -> PyResult<Self> {
+        Ok(match b {
+            0 => OpType::Variable,
+            1 => OpType::ScalarConst,
+            2 => OpType::DenseConst,
+            3 => OpType::SparseConst,
+            4 => OpType::Param,
+            5 => OpType::Sum,
+            6 => OpType::Neg,
+            7 => OpType::Reshape,
+            8 => OpType::Mul,
+            9 => OpType::Rmul,
+            10 => OpType::MulElem,
+            11 => OpType::Div,
+            12 => OpType::Index,
+            13 => OpType::Transpose,
+            14 => OpType::Promote,
+            15 => OpType::BroadcastTo,
+            16 => OpType::Hstack,
+            17 => OpType::Vstack,
+            18 => OpType::Concatenate,
+            19 => OpType::SumEntries,
+            20 => OpType::Trace,
+            21 => OpType::DiagVec,
+            22 => OpType::DiagMat,
+            23 => OpType::UpperTri,
+            24 => OpType::Conv,
+            25 => OpType::KronR,
+            26 => OpType::KronL,
+            27 => OpType::NoOp,
+            other => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Unknown op_type byte in linop buffer: {}",
+                    other
+                )));
+            }
+        })
+    }
 }
 
 /// Data associated with a LinOp node
@@ -450,6 +526,256 @@ impl LinOp {
                 .sum::<usize>()
                 .max(self.size()),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Binary-buffer deserialisation
+// ---------------------------------------------------------------------------
+//
+// `LinOp::from_buffer` is the fast-path counterpart to `from_python`. The
+// Python side serialises a whole tree (depth-first, pre-order) into a flat
+// byte buffer and a list of attachments (numpy/scipy data that's expensive
+// to copy into Rust). We parse the buffer here without per-node PyO3 calls.
+//
+// Format: see `_serialize_linop_tree` on the Python side. Binary, little-endian.
+//
+//   per node:
+//     u8  type_byte           (OpType::to_byte / from_byte)
+//     u32 num_dims
+//     u32 num_args
+//     [u64; num_dims] shape
+//     u8  data_kind
+//     <variable data payload depending on data_kind>
+//     [Node; num_args]        recursive
+//
+//   data_kind payloads (1 byte tag + payload):
+//     0  None             (nothing)
+//     1  Int              i64
+//     2  Float            f64
+//     3  Slices           u32 count, count × (i64, i64, i64)
+//     4  AttachDense      u32 attachment_index
+//     5  AttachSparse     u32 attachment_index
+//     6  NestedLinOp      recursive node
+//     7  AxisData         u8 axis_kind + payload + u8 keepdims
+//                           axis_kind 0 None: nothing
+//                           axis_kind 1 Single: i64
+//                           axis_kind 2 Multiple: u32 count, count × i64
+//     8  ConcatAxis       u8 has_value, i64 if has_value
+
+/// Cursor over a `&[u8]` with bounds-checked reads.
+struct BufferReader<'a> {
+    buf: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> BufferReader<'a> {
+    #[inline]
+    fn new(buf: &'a [u8]) -> Self {
+        Self { buf, pos: 0 }
+    }
+
+    #[inline]
+    fn need(&self, n: usize) -> PyResult<()> {
+        if self.pos + n > self.buf.len() {
+            Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "linop buffer truncated at pos {} ({} bytes available, {} needed)",
+                self.pos,
+                self.buf.len() - self.pos,
+                n
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    #[inline]
+    fn read_u8(&mut self) -> PyResult<u8> {
+        self.need(1)?;
+        let v = self.buf[self.pos];
+        self.pos += 1;
+        Ok(v)
+    }
+
+    #[inline]
+    fn read_u32(&mut self) -> PyResult<u32> {
+        self.need(4)?;
+        let v = u32::from_le_bytes(self.buf[self.pos..self.pos + 4].try_into().unwrap());
+        self.pos += 4;
+        Ok(v)
+    }
+
+    #[inline]
+    fn read_u64(&mut self) -> PyResult<u64> {
+        self.need(8)?;
+        let v = u64::from_le_bytes(self.buf[self.pos..self.pos + 8].try_into().unwrap());
+        self.pos += 8;
+        Ok(v)
+    }
+
+    #[inline]
+    fn read_i64(&mut self) -> PyResult<i64> {
+        Ok(self.read_u64()? as i64)
+    }
+
+    #[inline]
+    fn read_f64(&mut self) -> PyResult<f64> {
+        self.need(8)?;
+        let v = f64::from_le_bytes(self.buf[self.pos..self.pos + 8].try_into().unwrap());
+        self.pos += 8;
+        Ok(v)
+    }
+}
+
+impl LinOp {
+    /// Deserialise a single LinOp tree from a flat byte buffer.
+    ///
+    /// `attachments` is the Python-side list of "heavy" data — numpy arrays
+    /// and scipy sparse matrices — referenced by index from the buffer.
+    /// Each attachment is processed once with the same per-array conversion
+    /// the legacy `extract_dense_array` / `extract_sparse_array` would do.
+    pub fn from_buffer(
+        reader: &mut BufferReader<'_>,
+        attachments: &[Bound<'_, PyAny>],
+    ) -> PyResult<Self> {
+        let type_byte = reader.read_u8()?;
+        let op_type = OpType::from_byte(type_byte)?;
+
+        let num_dims = reader.read_u32()? as usize;
+        let num_args = reader.read_u32()? as usize;
+
+        let mut shape = Vec::with_capacity(num_dims);
+        for _ in 0..num_dims {
+            shape.push(reader.read_u64()? as usize);
+        }
+
+        let data = Self::read_data(reader, attachments)?;
+
+        let mut args = Vec::with_capacity(num_args);
+        for _ in 0..num_args {
+            args.push(LinOp::from_buffer(reader, attachments)?);
+        }
+
+        Ok(LinOp {
+            op_type,
+            shape,
+            args,
+            data,
+        })
+    }
+
+    fn read_data(
+        reader: &mut BufferReader<'_>,
+        attachments: &[Bound<'_, PyAny>],
+    ) -> PyResult<LinOpData> {
+        let kind = reader.read_u8()?;
+        match kind {
+            0 => Ok(LinOpData::None),
+
+            1 => Ok(LinOpData::Int(reader.read_i64()?)),
+
+            2 => Ok(LinOpData::Float(reader.read_f64()?)),
+
+            3 => {
+                let count = reader.read_u32()? as usize;
+                let mut slices = Vec::with_capacity(count);
+                for _ in 0..count {
+                    let start = reader.read_i64()?;
+                    let stop = reader.read_i64()?;
+                    let step = reader.read_i64()?;
+                    slices.push(SliceData { start, stop, step });
+                }
+                Ok(LinOpData::Slices(slices))
+            }
+
+            4 => {
+                let idx = reader.read_u32()? as usize;
+                let obj = attachments.get(idx).ok_or_else(|| {
+                    pyo3::exceptions::PyIndexError::new_err(format!(
+                        "dense attachment index {} out of range",
+                        idx
+                    ))
+                })?;
+                Self::extract_dense_array(obj)
+            }
+
+            5 => {
+                let idx = reader.read_u32()? as usize;
+                let obj = attachments.get(idx).ok_or_else(|| {
+                    pyo3::exceptions::PyIndexError::new_err(format!(
+                        "sparse attachment index {} out of range",
+                        idx
+                    ))
+                })?;
+                Self::extract_sparse_array(obj)
+            }
+
+            6 => {
+                let inner = LinOp::from_buffer(reader, attachments)?;
+                Ok(LinOpData::LinOpRef(Box::new(inner)))
+            }
+
+            7 => {
+                let axis_kind = reader.read_u8()?;
+                let axis = match axis_kind {
+                    0 => None,
+                    1 => Some(AxisSpec::Single(reader.read_i64()?)),
+                    2 => {
+                        let count = reader.read_u32()? as usize;
+                        let mut axes = Vec::with_capacity(count);
+                        for _ in 0..count {
+                            axes.push(reader.read_i64()?);
+                        }
+                        Some(AxisSpec::Multiple(axes))
+                    }
+                    other => {
+                        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                            "Unknown axis_kind in linop buffer: {}",
+                            other
+                        )));
+                    }
+                };
+                let keepdims = reader.read_u8()? != 0;
+                Ok(LinOpData::AxisData { axis, keepdims })
+            }
+
+            8 => {
+                let has_value = reader.read_u8()? != 0;
+                if has_value {
+                    Ok(LinOpData::ConcatAxis(Some(reader.read_i64()?)))
+                } else {
+                    Ok(LinOpData::ConcatAxis(None))
+                }
+            }
+
+            other => Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Unknown data_kind in linop buffer: {}",
+                other
+            ))),
+        }
+    }
+
+    /// Top-level: deserialise a list of root LinOps from a buffer.
+    /// The buffer is the concatenation of `count` serialised trees in order.
+    pub fn list_from_buffer(
+        buf: &[u8],
+        count: usize,
+        attachments: &[Bound<'_, PyAny>],
+    ) -> PyResult<Vec<LinOp>> {
+        let mut reader = BufferReader::new(buf);
+        let mut out = Vec::with_capacity(count);
+        for _ in 0..count {
+            out.push(LinOp::from_buffer(&mut reader, attachments)?);
+        }
+        if reader.pos != buf.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "trailing {} bytes in linop buffer (pos={}, len={})",
+                buf.len() - reader.pos,
+                reader.pos,
+                buf.len()
+            )));
+        }
+        Ok(out)
     }
 }
 

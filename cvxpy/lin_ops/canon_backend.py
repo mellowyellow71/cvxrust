@@ -678,6 +678,176 @@ class PythonCanonBackend(CanonBackend):
         pass  # noqa
 
 
+# ---------------------------------------------------------------------------
+# LinOp tree → flat buffer serialisation, used by RustCanonBackend.
+#
+# The Rust side (see `LinOp::from_buffer` in cvxpy_rust/src/linop.rs) parses
+# this format without per-node `obj.getattr(...)` calls. On cold-start LASSO
+# 200×500, that round-trip dominates the Rust build_matrix time (~38%), and
+# a single Python-side tree walk that writes a flat buffer is much cheaper
+# than ~80 PyO3 boundary crossings.
+#
+# Format is binary little-endian; see the Rust side for the full layout.
+# ---------------------------------------------------------------------------
+
+import struct as _struct  # local alias to avoid shadowing in any nested scope
+
+# Must match OpType::to_byte / from_byte in cvxpy_rust/src/linop.rs.
+_OP_TYPE_TO_BYTE = {
+    "variable": 0,
+    "scalar_const": 1,
+    "dense_const": 2,
+    "sparse_const": 3,
+    "param": 4,
+    "sum": 5,
+    "neg": 6,
+    "reshape": 7,
+    "mul": 8,
+    "rmul": 9,
+    "mul_elem": 10,
+    "div": 11,
+    "index": 12,
+    "transpose": 13,
+    "promote": 14,
+    "broadcast_to": 15,
+    "hstack": 16,
+    "vstack": 17,
+    "concatenate": 18,
+    "sum_entries": 19,
+    "trace": 20,
+    "diag_vec": 21,
+    "diag_mat": 22,
+    "upper_tri": 23,
+    "conv": 24,
+    "kron_r": 25,
+    "kron_l": 26,
+    "no_op": 27,
+}
+
+_NESTED_LINOP_TYPES = frozenset(
+    {"mul", "rmul", "mul_elem", "div", "conv", "kron_l", "kron_r"}
+)
+_INT_DATA_TYPES = frozenset({"variable", "param", "diag_vec", "diag_mat"})
+
+
+def _serialize_linop_tree(roots):
+    """Serialise a list of LinOp trees into (buffer: bytes, attachments: list).
+
+    `attachments` holds the heavy data (numpy arrays, scipy sparse matrices)
+    that the buffer references by index. Rust extracts each attachment once
+    using the same per-array conversion the legacy path used.
+    """
+    buf = bytearray()
+    attachments = []
+    for root in roots:
+        _serialize_linop_node(root, buf, attachments)
+    return bytes(buf), attachments
+
+
+def _serialize_linop_node(lin_op, buf, attachments):
+    buf.append(_OP_TYPE_TO_BYTE[lin_op.type])
+    shape = lin_op.shape
+    args = lin_op.args
+    buf.extend(_struct.pack("<I", len(shape)))
+    buf.extend(_struct.pack("<I", len(args)))
+    for d in shape:
+        buf.extend(_struct.pack("<Q", int(d)))
+
+    _serialize_linop_data(lin_op.data, lin_op.type, buf, attachments)
+
+    for arg in args:
+        _serialize_linop_node(arg, buf, attachments)
+
+
+def _serialize_linop_data(data, op_type, buf, attachments):
+    # Tag 0 = None. Mirrors the Rust path's leading `if data_attr.is_none()`.
+    if data is None:
+        buf.append(0)
+        return
+
+    if op_type in _INT_DATA_TYPES:
+        buf.append(1)
+        buf.extend(_struct.pack("<q", int(data)))
+        return
+
+    if op_type == "scalar_const":
+        buf.append(2)
+        buf.extend(_struct.pack("<d", float(data)))
+        return
+
+    if op_type == "dense_const":
+        buf.append(4)
+        attachments.append(data)
+        buf.extend(_struct.pack("<I", len(attachments) - 1))
+        return
+
+    if op_type == "sparse_const":
+        buf.append(5)
+        attachments.append(data)
+        buf.extend(_struct.pack("<I", len(attachments) - 1))
+        return
+
+    if op_type == "index":
+        buf.append(3)
+        buf.extend(_struct.pack("<I", len(data)))
+        for sl in data:
+            step = sl.step if sl.step is not None else 1
+            buf.extend(_struct.pack("<qqq", int(sl.start), int(sl.stop), int(step)))
+        return
+
+    if op_type in _NESTED_LINOP_TYPES:
+        buf.append(6)
+        _serialize_linop_node(data, buf, attachments)
+        return
+
+    if op_type == "transpose":
+        # Python side: data is (axes,) tuple/list (or empty / [None]).
+        if len(data) > 0 and data[0] is not None:
+            axes = data[0]
+            buf.append(7)        # AxisData
+            buf.append(2)        # axis_kind = Multiple
+            buf.extend(_struct.pack("<I", len(axes)))
+            for a in axes:
+                buf.extend(_struct.pack("<q", int(a)))
+            buf.append(0)        # keepdims = False
+        else:
+            buf.append(0)        # None
+        return
+
+    if op_type == "sum_entries":
+        # data is [axis, keepdims]; axis is None / int / iterable of ints.
+        axis = data[0]
+        keepdims = bool(data[1]) if len(data) > 1 else False
+        buf.append(7)            # AxisData
+        if axis is None:
+            buf.append(0)        # axis_kind = None
+        elif isinstance(axis, (int, np.integer)):
+            buf.append(1)        # axis_kind = Single
+            buf.extend(_struct.pack("<q", int(axis)))
+        else:
+            axes = list(axis)
+            buf.append(2)        # axis_kind = Multiple
+            buf.extend(_struct.pack("<I", len(axes)))
+            for a in axes:
+                buf.extend(_struct.pack("<q", int(a)))
+        buf.append(1 if keepdims else 0)
+        return
+
+    if op_type == "concatenate":
+        # data is [axis], axis is None or int.
+        axis = data[0] if len(data) > 0 else None
+        buf.append(8)            # ConcatAxis
+        if axis is None:
+            buf.append(0)        # has_value = False
+        else:
+            buf.append(1)        # has_value = True
+            buf.extend(_struct.pack("<q", int(axis)))
+        return
+
+    # Any other op type with non-None data: treat as None (mirrors Rust default).
+    buf.append(0)
+
+
 class RustCanonBackend(CanonBackend):
     """
     Rust canonicalization backend using PyO3 bindings to cvxpy_rust.
@@ -696,12 +866,31 @@ class RustCanonBackend(CanonBackend):
     def build_matrix(self, lin_ops: list[LinOp]) -> sp.csc_array:
         import cvxpy_rust
         self.id_to_col[-1] = self.var_length
-        (data, (row, col), shape) = cvxpy_rust.build_matrix(lin_ops,
-                                                            self.param_size_plus_one,
-                                                            self.id_to_col,
-                                                            self.param_to_size,
-                                                            self.param_to_col,
-                                                            self.var_length)
+
+        # Prefer the buffer-based entry point; falls back to per-PyAny
+        # extraction on older cvxpy_rust builds without it.
+        if hasattr(cvxpy_rust, "build_matrix_from_buffer"):
+            tree_buffer, attachments = _serialize_linop_tree(lin_ops)
+            (data, (row, col), shape) = cvxpy_rust.build_matrix_from_buffer(
+                tree_buffer,
+                len(lin_ops),
+                attachments,
+                self.param_size_plus_one,
+                self.id_to_col,
+                self.param_to_size,
+                self.param_to_col,
+                self.var_length,
+            )
+        else:
+            (data, (row, col), shape) = cvxpy_rust.build_matrix(
+                lin_ops,
+                self.param_size_plus_one,
+                self.id_to_col,
+                self.param_to_size,
+                self.param_to_col,
+                self.var_length,
+            )
+
         self.id_to_col.pop(-1)
         return sp.csc_array((data, (row, col)), shape)
 
