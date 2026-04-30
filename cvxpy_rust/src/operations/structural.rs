@@ -75,19 +75,6 @@ fn try_index_typed(
     let param_slot = entry.param_slot;
 
     match &entry.block {
-        Block::Zero { .. } => Some(NodeValue {
-            out_rows,
-            var_cols,
-            blocks: vec![BlockEntry {
-                param_slot,
-                var_col_offset,
-                block: Block::Zero {
-                    rows: out_rows,
-                    cols: 0,
-                },
-            }],
-        }),
-
         Block::Identity { n } => {
             // Row i of the output is row `row_indices[i]` of the original
             // identity, i.e. has a single 1 at column `row_indices[i]` of
@@ -114,15 +101,15 @@ fn try_index_typed(
                     blocks: vec![BlockEntry {
                         param_slot,
                         var_col_offset,
-                        block: Block::ColPerm { perm, ncols: *n },
+                        block: Block::ColPerm { perm },
                     }],
                 })
             }
         }
 
-        // Dense / SparseCsc / ScaledIdentity / ColPerm / Coo: fall through
-        // to the COO select_rows path. These are correct via the existing
-        // implementation; lazy handlers are future work.
+        // Dense / ColPerm / Coo: fall through to the COO select_rows
+        // path. Correct via the existing implementation; future PRs can
+        // add lazy strided-Dense and sub-ColPerm composition here.
         _ => None,
     }
 }
@@ -937,9 +924,8 @@ mod tests {
         let nv = process_index_block(&index_op, &ctx);
         assert_eq!(nv.blocks.len(), 1);
         match &nv.blocks[0].block {
-            Block::ColPerm { perm, ncols } => {
+            Block::ColPerm { perm } => {
                 assert_eq!(perm.as_ref(), &[0_i64, 2, 4]);
-                assert_eq!(*ncols, 5);
             }
             other => panic!("expected ColPerm, got {:?}", other),
         }

@@ -271,91 +271,6 @@ impl SparseTensor {
     }
 }
 
-/// Builder for SparseTensor with efficient accumulation
-#[derive(Debug)]
-pub struct SparseTensorBuilder {
-    data: Vec<f64>,
-    rows: Vec<i64>,
-    cols: Vec<i64>,
-    param_offsets: Vec<i64>,
-    shape: (usize, usize),
-}
-
-impl SparseTensorBuilder {
-    /// Create a new builder with given shape and capacity
-    pub fn new(shape: (usize, usize), capacity: usize) -> Self {
-        SparseTensorBuilder {
-            data: Vec::with_capacity(capacity),
-            rows: Vec::with_capacity(capacity),
-            cols: Vec::with_capacity(capacity),
-            param_offsets: Vec::with_capacity(capacity),
-            shape,
-        }
-    }
-
-    /// Add a single entry
-    #[inline]
-    pub fn push(&mut self, value: f64, row: i64, col: i64, param_offset: i64) {
-        self.data.push(value);
-        self.rows.push(row);
-        self.cols.push(col);
-        self.param_offsets.push(param_offset);
-    }
-
-    /// Add an identity matrix block for a variable
-    pub fn add_variable_identity(&mut self, size: usize, col_offset: i64, param_offset: i64) {
-        for i in 0..size {
-            self.push(1.0, i as i64, col_offset + i as i64, param_offset);
-        }
-    }
-
-    /// Add a constant column vector
-    #[allow(dead_code)]
-    pub fn add_constant_column(&mut self, data: &[f64], col_offset: i64, param_offset: i64) {
-        for (i, &value) in data.iter().enumerate() {
-            if value != 0.0 {
-                self.push(value, i as i64, col_offset, param_offset);
-            }
-        }
-    }
-
-    /// Add sparse CSC data
-    #[allow(dead_code)]
-    pub fn add_sparse_csc(
-        &mut self,
-        values: &[f64],
-        indices: &[i64],
-        indptr: &[i64],
-        _shape: (usize, usize),
-        row_offset: i64,
-        col_offset: i64,
-        param_offset: i64,
-    ) {
-        let n_cols = indptr.len() - 1;
-        for j in 0..n_cols {
-            let start = indptr[j] as usize;
-            let end = indptr[j + 1] as usize;
-            for idx in start..end {
-                let row = indices[idx];
-                let value = values[idx];
-                if value != 0.0 {
-                    self.push(value, row + row_offset, j as i64 + col_offset, param_offset);
-                }
-            }
-        }
-    }
-
-    /// Build the final SparseTensor
-    pub fn build(self) -> SparseTensor {
-        SparseTensor {
-            data: self.data,
-            rows: self.rows,
-            cols: self.cols,
-            param_offsets: self.param_offsets,
-            shape: self.shape,
-        }
-    }
-}
 
 /// Result structure returned to Python
 #[derive(Debug)]
@@ -391,19 +306,6 @@ pub struct ReducedMatrix {
     pub final_indices: Vec<i64>,
     pub final_indptr: Vec<i64>,
     pub final_shape: (usize, usize),
-}
-
-impl BuildMatrixResult {
-    pub fn compute_reduction(&self, var_length: usize, quad_form: bool) -> ReducedMatrix {
-        compute_reduction_from_slices(
-            &self.data,
-            &self.rows,
-            &self.cols,
-            self.shape,
-            var_length,
-            quad_form,
-        )
-    }
 }
 
 /// Compute the reduction that `reduce_problem_data_tensor` would compute
@@ -617,18 +519,6 @@ mod tests {
         assert_eq!(tensor.data, vec![-1.0, 2.0]);
     }
 
-    #[test]
-    fn test_builder() {
-        let mut builder = SparseTensorBuilder::new((3, 3), 10);
-        builder.add_variable_identity(3, 0, 0);
-
-        let tensor = builder.build();
-        assert_eq!(tensor.nnz(), 3);
-        assert_eq!(tensor.data, vec![1.0, 1.0, 1.0]);
-        assert_eq!(tensor.rows, vec![0, 1, 2]);
-        assert_eq!(tensor.cols, vec![0, 1, 2]);
-    }
-
     /// Reduction sanity test. Mirrors the simplest case
     /// `reduce_problem_data_tensor` would handle: a small csc-shaped tensor
     /// with a few duplicate rows and parameters.
@@ -653,7 +543,8 @@ mod tests {
             cols: vec![0, 1, 0, 1, 0],
             shape: (12, 2),
         };
-        let red = result.compute_reduction(4, true);
+        let red = compute_reduction_from_slices(
+            &result.data, &result.rows, &result.cols, result.shape, 4, true);
 
         assert_eq!(red.reduced_data, vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(red.reduced_col_indices, vec![0, 1, 0, 1, 0]);
@@ -678,7 +569,8 @@ mod tests {
             cols: vec![0, 0, 0],
             shape: (6, 1),
         };
-        let red = result.compute_reduction(2, false);
+        let red = compute_reduction_from_slices(
+            &result.data, &result.rows, &result.cols, result.shape, 2, false);
         assert_eq!(red.final_shape, (2, 3));
         // unique_rows = [0, 2, 5]
         // final_indices = [0%2, 2%2, 5%2] = [0, 0, 1]
@@ -698,7 +590,8 @@ mod tests {
             cols: vec![0, 1, 0, 1, 0],
             shape: (12, 2),
         };
-        let red = result.compute_reduction(4, true);
+        let red = compute_reduction_from_slices(
+            &result.data, &result.rows, &result.cols, result.shape, 4, true);
         // Three non-zero entries at rows {0, 5, 11} -> 3 unique rows still,
         // but reduced_data has only 3 entries.
         assert_eq!(red.reduced_data, vec![1.0, 2.0, 3.0]);
@@ -719,7 +612,8 @@ mod tests {
             cols: vec![5, 1, 3],
             shape: (1, 6),
         };
-        let red = result.compute_reduction(1, true);
+        let red = compute_reduction_from_slices(
+            &result.data, &result.rows, &result.cols, result.shape, 1, true);
         assert_eq!(red.reduced_col_indices, vec![1, 3, 5]);
         // Data values must be permuted along with the cols.
         assert_eq!(red.reduced_data, vec![20.0, 30.0, 10.0]);

@@ -138,43 +138,11 @@ impl OpType {
         )
     }
 
-    /// Stable byte encoding for the binary buffer format used by
-    /// `build_matrix_from_buffer`. Numbers are part of the on-the-wire
-    /// protocol — never reorder, only append.
-    pub fn to_byte(self) -> u8 {
-        match self {
-            OpType::Variable => 0,
-            OpType::ScalarConst => 1,
-            OpType::DenseConst => 2,
-            OpType::SparseConst => 3,
-            OpType::Param => 4,
-            OpType::Sum => 5,
-            OpType::Neg => 6,
-            OpType::Reshape => 7,
-            OpType::Mul => 8,
-            OpType::Rmul => 9,
-            OpType::MulElem => 10,
-            OpType::Div => 11,
-            OpType::Index => 12,
-            OpType::Transpose => 13,
-            OpType::Promote => 14,
-            OpType::BroadcastTo => 15,
-            OpType::Hstack => 16,
-            OpType::Vstack => 17,
-            OpType::Concatenate => 18,
-            OpType::SumEntries => 19,
-            OpType::Trace => 20,
-            OpType::DiagVec => 21,
-            OpType::DiagMat => 22,
-            OpType::UpperTri => 23,
-            OpType::Conv => 24,
-            OpType::KronR => 25,
-            OpType::KronL => 26,
-            OpType::NoOp => 27,
-        }
-    }
-
-    /// Decode an op_type from the binary buffer format.
+    /// Decode an op_type from the binary buffer format used by
+    /// `build_matrix_from_buffer`. The byte encoding is part of the
+    /// on-the-wire protocol with the Python side
+    /// (`_OP_TYPE_TO_BYTE` in `cvxpy/lin_ops/canon_backend.py`) — never
+    /// reorder, only append.
     pub fn from_byte(b: u8) -> PyResult<Self> {
         Ok(match b {
             0 => OpType::Variable,
@@ -628,13 +596,16 @@ impl<'a> BufferReader<'a> {
 }
 
 impl LinOp {
-    /// Deserialise a single LinOp tree from a flat byte buffer.
+    /// Deserialise a single LinOp tree from a `BufferReader`.
     ///
     /// `attachments` is the Python-side list of "heavy" data — numpy arrays
     /// and scipy sparse matrices — referenced by index from the buffer.
     /// Each attachment is processed once with the same per-array conversion
     /// the legacy `extract_dense_array` / `extract_sparse_array` would do.
-    pub fn from_buffer(
+    ///
+    /// Internal — the public entry point is `list_from_buffer` which takes
+    /// a raw `&[u8]`.
+    fn from_buffer(
         reader: &mut BufferReader<'_>,
         attachments: &[Bound<'_, PyAny>],
     ) -> PyResult<Self> {

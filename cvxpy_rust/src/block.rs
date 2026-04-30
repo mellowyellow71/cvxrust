@@ -2,14 +2,19 @@
 //!
 //! Each LinOp subtree's value is a Jacobian matrix. The legacy code flattens
 //! every subtree to COO triplets immediately. This module introduces a typed
-//! representation so subtrees can stay in their natural form (Identity, Dense,
-//! SparseCSC, ...) until the very end, enabling BLAS-class fast paths for
-//! `Mul(A, x)` and friends. See `/home/ray/.claude/plans/iterative-meandering-naur.md`.
+//! representation so subtrees can stay in their natural form (Identity,
+//! Dense, ColPerm, ...) until the very end, enabling fast paths for
+//! `Mul(A, x)` and friends.
 //!
-//! PR 1 introduces the types and conversion helpers only — no handlers are
-//! migrated yet. `process_linop` still returns `SparseTensor` and is unchanged.
-
-#![allow(dead_code)] // Wired up in PR 2+; tests below exercise these helpers.
+//! Leaf handlers produce typed Blocks (Identity for Variable, Dense for
+//! dense/scalar constants, Coo for SparseConst/Param); `process_index_block`
+//! produces Identity or ColPerm; `process_mul`'s fast-path probe is the
+//! consumer that exploits the typed structure today. Other handlers still
+//! flow through `Block::Coo` via `NodeValue::from_coo`.
+//!
+//! The variant set is intentionally minimal — just what's emitted and
+//! consumed today. Add new variants when there's a producer *and* a
+//! consumer, not before.
 
 use std::sync::Arc;
 
@@ -43,19 +48,6 @@ impl DenseF {
         }
     }
 
-    /// Wrap a plain C-order (row-major) buffer of length `rows * cols`.
-    pub fn from_row_major(rows: usize, cols: usize, data: Arc<[f64]>) -> Self {
-        debug_assert_eq!(data.len(), rows * cols);
-        DenseF {
-            rows,
-            cols,
-            data,
-            row_stride: cols,
-            col_stride: 1,
-            row_offset: 0,
-        }
-    }
-
     #[inline]
     pub fn get(&self, i: usize, j: usize) -> f64 {
         debug_assert!(i < self.rows && j < self.cols);
@@ -63,51 +55,18 @@ impl DenseF {
     }
 }
 
-/// CSC sparse matrix held by Arc'd component slices.
-///
-/// Mirrors the layout cvxpy passes from Python (scipy.sparse CSC). Wrapping
-/// the existing `Arc<[..]>` slices lets us reuse the input buffers directly
-/// without converting to `sprs::CsMat` until a downstream op needs it.
-#[derive(Debug, Clone)]
-pub struct SparseCsc {
-    pub rows: usize,
-    pub cols: usize,
-    pub indptr: Arc<[i64]>,
-    pub indices: Arc<[i64]>,
-    pub data: Arc<[f64]>,
-}
-
-impl SparseCsc {
-    pub fn nnz(&self) -> usize {
-        self.data.len()
-    }
-}
-
 /// Typed representation of one subtree's Jacobian, before COO flattening.
-///
-/// Variants are ordered roughly by structural cheapness: `Zero` and the
-/// identity family encode their value in O(1) words; `Dense` / `SparseCsc`
-/// own real numerical data; `Coo` is the escape hatch for ops we haven't
-/// migrated yet.
 #[derive(Debug, Clone)]
 pub enum Block {
-    /// All-zero `(rows, cols)` matrix. Drops out of any sum.
-    Zero { rows: usize, cols: usize },
     /// `I_n`. Realised at flatten time as `n` entries `(1.0, i, var_col_offset+i)`.
     Identity { n: usize },
-    /// `α · I_n`.
-    ScaledIdentity { alpha: f64, n: usize },
-    /// Permutation: row `i` has a single `1.0` at column `perm[i]`. `perm.len() == out_rows`.
-    /// Used for `Index` over `Identity` and `Hstack`/`Vstack` of single-variable selections.
-    ColPerm {
-        perm: Arc<[i64]>,
-        ncols: usize,
-    },
+    /// Permutation: row `i` has a single `1.0` at column `perm[i]`.
+    /// Emitted by `Index` over an `Identity` input when the slice is
+    /// non-contiguous.
+    ColPerm { perm: Arc<[i64]> },
     /// Strided F-order dense matrix.
     Dense(Arc<DenseF>),
-    /// CSC sparse matrix.
-    SparseCsc(Arc<SparseCsc>),
-    /// Mixed-parametric COO triplets — the legacy path. Always wraps a
+    /// Mixed-parametric COO triplets — the escape hatch. Wraps a
     /// `SparseTensor` whose `param_offsets` already encode parameter slots,
     /// so `BlockEntry::param_slot` is unused for `Coo` blocks.
     Coo(SparseTensor),
@@ -117,11 +76,9 @@ impl Block {
     /// Number of nonzero entries this block will emit when flattened.
     pub fn estimated_nnz(&self) -> usize {
         match self {
-            Block::Zero { .. } => 0,
-            Block::Identity { n } | Block::ScaledIdentity { n, .. } => *n,
-            Block::ColPerm { perm, .. } => perm.len(),
+            Block::Identity { n } => *n,
+            Block::ColPerm { perm } => perm.len(),
             Block::Dense(d) => d.rows * d.cols,
-            Block::SparseCsc(s) => s.nnz(),
             Block::Coo(t) => t.nnz(),
         }
     }
@@ -204,23 +161,13 @@ impl NodeValue {
                 block,
             } = entry;
             match block {
-                Block::Zero { .. } => {}
-
                 Block::Identity { n } => {
                     for i in 0..n {
                         out.push(1.0, i as i64, var_col_offset + i as i64, param_slot);
                     }
                 }
 
-                Block::ScaledIdentity { alpha, n } => {
-                    if alpha != 0.0 {
-                        for i in 0..n {
-                            out.push(alpha, i as i64, var_col_offset + i as i64, param_slot);
-                        }
-                    }
-                }
-
-                Block::ColPerm { perm, .. } => {
+                Block::ColPerm { perm } => {
                     for (row, &col) in perm.iter().enumerate() {
                         out.push(1.0, row as i64, var_col_offset + col, param_slot);
                     }
@@ -234,20 +181,6 @@ impl NodeValue {
                             let v = dense.get(i, j);
                             if v != 0.0 {
                                 out.push(v, i as i64, col, param_slot);
-                            }
-                        }
-                    }
-                }
-
-                Block::SparseCsc(csc) => {
-                    for j in 0..csc.cols {
-                        let start = csc.indptr[j] as usize;
-                        let end = csc.indptr[j + 1] as usize;
-                        let col = var_col_offset + j as i64;
-                        for k in start..end {
-                            let v = csc.data[k];
-                            if v != 0.0 {
-                                out.push(v, csc.indices[k], col, param_slot);
                             }
                         }
                     }
@@ -291,42 +224,6 @@ mod tests {
     }
 
     #[test]
-    fn scaled_identity_drops_when_alpha_zero() {
-        let nv = NodeValue {
-            out_rows: 2,
-            var_cols: 5,
-            blocks: vec![BlockEntry {
-                param_slot: 0,
-                var_col_offset: 0,
-                block: Block::ScaledIdentity { alpha: 0.0, n: 2 },
-            }],
-        };
-        let t = nv.to_coo();
-        assert_eq!(t.nnz(), 0);
-    }
-
-    #[test]
-    fn scaled_identity_emits_alpha() {
-        let nv = NodeValue {
-            out_rows: 2,
-            var_cols: 5,
-            blocks: vec![BlockEntry {
-                param_slot: 3,
-                var_col_offset: 1,
-                block: Block::ScaledIdentity {
-                    alpha: -2.5,
-                    n: 2,
-                },
-            }],
-        };
-        let t = nv.to_coo();
-        assert_eq!(t.data, vec![-2.5, -2.5]);
-        assert_eq!(t.rows, vec![0, 1]);
-        assert_eq!(t.cols, vec![1, 2]);
-        assert_eq!(t.param_offsets, vec![3, 3]);
-    }
-
-    #[test]
     fn col_perm_emits_one_per_row() {
         let perm: Arc<[i64]> = Arc::from(vec![2_i64, 0, 1]);
         let nv = NodeValue {
@@ -335,7 +232,7 @@ mod tests {
             blocks: vec![BlockEntry {
                 param_slot: 0,
                 var_col_offset: 1,
-                block: Block::ColPerm { perm, ncols: 3 },
+                block: Block::ColPerm { perm },
             }],
         };
         let t = nv.to_coo();
@@ -392,35 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn sparse_csc_walk_emits_in_csc_order() {
-        // 3x2 CSC:
-        //   1 .
-        //   . 4
-        //   2 .
-        // indptr=[0,2,3], indices=[0,2,1], data=[1,2,4]
-        let csc = Arc::new(SparseCsc {
-            rows: 3,
-            cols: 2,
-            indptr: Arc::from(vec![0_i64, 2, 3]),
-            indices: Arc::from(vec![0_i64, 2, 1]),
-            data: Arc::from(vec![1.0, 2.0, 4.0]),
-        });
-        let nv = NodeValue {
-            out_rows: 3,
-            var_cols: 5,
-            blocks: vec![BlockEntry {
-                param_slot: 0,
-                var_col_offset: 1,
-                block: Block::SparseCsc(csc),
-            }],
-        };
-        let t = nv.to_coo();
-        assert_eq!(t.data, vec![1.0, 2.0, 4.0]);
-        assert_eq!(t.rows, vec![0, 2, 1]);
-        assert_eq!(t.cols, vec![1, 1, 2]);
-    }
-
-    #[test]
     fn from_coo_round_trips() {
         let mut t = SparseTensor::empty((4, 6));
         t.push(7.0, 1, 2, 0);
@@ -436,6 +304,8 @@ mod tests {
 
     #[test]
     fn multi_block_concatenates() {
+        // Two Identity blocks at different var_col_offsets — emitted as
+        // separate runs in the to_coo output.
         let nv = NodeValue {
             out_rows: 2,
             var_cols: 4,
@@ -448,40 +318,14 @@ mod tests {
                 BlockEntry {
                     param_slot: 0,
                     var_col_offset: 2,
-                    block: Block::ScaledIdentity { alpha: -1.0, n: 2 },
+                    block: Block::Identity { n: 2 },
                 },
             ],
         };
         let t = nv.to_coo();
         assert_eq!(t.nnz(), 4);
-        assert_eq!(t.data, vec![1.0, 1.0, -1.0, -1.0]);
+        assert_eq!(t.data, vec![1.0, 1.0, 1.0, 1.0]);
         assert_eq!(t.rows, vec![0, 1, 0, 1]);
         assert_eq!(t.cols, vec![0, 1, 2, 3]);
-    }
-
-    #[test]
-    fn zero_block_emits_nothing() {
-        let nv = NodeValue {
-            out_rows: 3,
-            var_cols: 3,
-            blocks: vec![BlockEntry {
-                param_slot: 0,
-                var_col_offset: 0,
-                block: Block::Zero { rows: 3, cols: 3 },
-            }],
-        };
-        assert_eq!(nv.to_coo().nnz(), 0);
-    }
-
-    #[test]
-    fn dense_f_get_strided() {
-        // Row-major 2x3 viewed via DenseF::from_row_major:
-        //   1 2 3
-        //   4 5 6
-        let data: Arc<[f64]> = Arc::from(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-        let d = DenseF::from_row_major(2, 3, data);
-        assert_eq!(d.get(0, 0), 1.0);
-        assert_eq!(d.get(0, 2), 3.0);
-        assert_eq!(d.get(1, 1), 5.0);
     }
 }
