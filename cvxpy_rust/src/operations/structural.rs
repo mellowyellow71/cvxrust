@@ -103,8 +103,9 @@ pub fn process_transpose(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTenso
             axis: Some(AxisSpec::Multiple(axes)),
             ..
         } => axes.clone(),
-        LinOpData::None => {
-            // Default transpose: reverse all axes
+        // None data, or AxisData with axis=None (a plain `.T` — CVXPY sends
+        // data=[None]): numpy semantics, reverse all axes
+        LinOpData::None | LinOpData::AxisData { axis: None, .. } => {
             let n_dims = lin_op.args[0].shape.len();
             (0..n_dims).rev().map(|i| i as i64).collect()
         }
