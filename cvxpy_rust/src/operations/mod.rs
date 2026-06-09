@@ -150,14 +150,19 @@ pub fn count_nnz(lin_op: &LinOp, ctx: &ProcessingContext) -> usize {
         }
 
         // — Mul / Rmul: upper bound based on data nnz × num_blocks —
+        // NOTE: the Mul(Const, Variable) fast path in arithmetic.rs emits
+        // exactly data_nnz * num_blocks entries — keep these in sync.
         OpType::Mul | OpType::Rmul => {
-            let data_nnz = match &lin_op.data {
-                LinOpData::LinOpRef(ref inner) => count_nnz(inner, ctx),
-                _ => lin_op.size(),
-            };
             let num_blocks = lin_op.args.first()
                 .map_or(1, |a| a.shape.get(1).copied().unwrap_or(1));
-            data_nnz * num_blocks
+            match &lin_op.data {
+                // Scalar * tensor scales entries in place: nnz == arg nnz
+                LinOpData::LinOpRef(ref inner) if inner.op_type == OpType::ScalarConst => {
+                    lin_op.args.first().map_or(0, |a| count_nnz(a, ctx))
+                }
+                LinOpData::LinOpRef(ref inner) => count_nnz(inner, ctx) * num_blocks,
+                _ => lin_op.size() * num_blocks,
+            }
         }
 
         // — MulElem: upper bound = min(arg_nnz, data_nnz * broadcast) —

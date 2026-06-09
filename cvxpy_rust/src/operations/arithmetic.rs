@@ -41,12 +41,10 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         _ => panic!("Mul operation must have LinOp data"),
     };
 
-    // Process the argument (rhs)
-    let rhs = process_linop(&lin_op.args[0], ctx);
-
     // Check if the lhs is parametric (contains Param nodes)
     if is_parametric(lhs_linop) {
         // Process the lhs as a tensor to preserve param_offsets
+        let rhs = process_linop(&lin_op.args[0], ctx);
         let lhs_tensor = process_linop(lhs_linop, ctx);
         return multiply_parametric_left(&lhs_tensor, lhs_linop, &rhs, lin_op, ctx);
     }
@@ -55,6 +53,27 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     let t0 = if profile { Some(std::time::Instant::now()) } else { None };
     let lhs_data = get_constant_matrix_data(lhs_linop, Some(ctx));
     let extract_ms = t0.map(|t| t.elapsed().as_secs_f64() * 1000.0);
+
+    // Fast path: Mul(Const, Variable). The Jacobian of A @ x w.r.t. x is A
+    // itself, so emit A's entries directly at the variable's column block
+    // instead of materializing x's identity tensor and multiplying A
+    // through it.
+    if let Some(var_id) = as_plain_variable(&lin_op.args[0]) {
+        let arg_size = lin_op.args[0].size();
+        if let Some(result) = mul_const_by_variable(&lhs_data, var_id, arg_size, lin_op, ctx) {
+            if profile {
+                eprintln!(
+                    "[cvxpy_rust] process_mul: extract={:.3}ms, fast path const@variable ({} entries)",
+                    extract_ms.unwrap_or(0.0),
+                    result.nnz(),
+                );
+            }
+            return result;
+        }
+    }
+
+    // Process the argument (rhs)
+    let rhs = process_linop(&lin_op.args[0], ctx);
 
     // Perform block diagonal multiplication
     let t1 = if profile { Some(std::time::Instant::now()) } else { None };
@@ -635,6 +654,178 @@ enum ConstantMatrix {
         rows: usize,
         cols: usize,
     },
+}
+
+/// Returns Some(variable_id) if this LinOp is a plain variable, possibly
+/// wrapped in Reshape or single-arg Sum nodes (both are no-ops on the COO
+/// tensor). Index/Promote wrappers are NOT identities and must not be
+/// unwrapped here.
+fn as_plain_variable(lin_op: &LinOp) -> Option<i64> {
+    use crate::linop::OpType;
+    match lin_op.op_type {
+        OpType::Variable => match &lin_op.data {
+            LinOpData::Int(id) => Some(*id),
+            _ => None,
+        },
+        OpType::Reshape | OpType::Sum if lin_op.args.len() == 1 => {
+            as_plain_variable(&lin_op.args[0])
+        }
+        _ => None,
+    }
+}
+
+/// Number of identity blocks for the Mul fast path: the variable's
+/// flattened size must tile exactly into the constant's column count.
+fn checked_num_blocks(arg_size: usize, a_cols: usize) -> Option<usize> {
+    if a_cols == 0 || arg_size % a_cols != 0 {
+        return None;
+    }
+    Some(arg_size / a_cols)
+}
+
+/// Fast path for Mul(Const, Variable): the Jacobian of A @ x w.r.t. x is A
+/// itself, so emit A's entries directly at the variable's column block
+/// instead of multiplying A through x's identity tensor. Cost is
+/// O(nnz(A) * num_blocks) index arithmetic with zero multiplications.
+///
+/// For a matrix variable X with k columns the result is kron(I_k, A):
+/// entry A[r, c] of block b lands at
+///   (b * a_rows + r,  var_col + b * a_cols + c)
+/// which matches the emission order of the general block-diagonal path.
+///
+/// count_nnz's Mul arm (operations/mod.rs) assumes this emits exactly
+/// data_nnz * num_blocks entries — keep them in sync.
+///
+/// Returns None when the constant's shape doesn't tile the variable evenly;
+/// the caller falls back to the general path.
+fn mul_const_by_variable(
+    lhs: &ConstantMatrix,
+    var_id: i64,
+    arg_size: usize,
+    lin_op: &LinOp,
+    ctx: &ProcessingContext,
+) -> Option<SparseTensor> {
+    let output_rows = lin_op.size();
+    let var_col = ctx.var_col(var_id);
+    let param_offset = ctx.const_param();
+    let out_shape = (output_rows, ctx.var_length as usize + 1);
+
+    match lhs {
+        ConstantMatrix::Scalar(s) => {
+            if arg_size != output_rows {
+                return None;
+            }
+            // s * x: scaled identity at the variable's columns
+            let mut result = SparseTensor::with_capacity(out_shape, arg_size);
+            if *s != 0.0 {
+                for i in 0..arg_size {
+                    result.push(*s, i as i64, var_col + i as i64, param_offset);
+                }
+            }
+            Some(result)
+        }
+
+        ConstantMatrix::DenseColMajor {
+            data,
+            rows: a_rows,
+            cols: a_cols,
+        } => {
+            let num_blocks = checked_num_blocks(arg_size, *a_cols)?;
+            if num_blocks * a_rows != output_rows {
+                return None;
+            }
+            let a_nnz = data.iter().filter(|&&v| v != 0.0).count();
+            let fully_dense = a_nnz == a_rows * a_cols;
+            let mut result = SparseTensor::with_capacity(out_shape, a_nnz * num_blocks);
+            for b in 0..num_blocks {
+                let row_base = (b * a_rows) as i64;
+                let col_base = var_col + (b * a_cols) as i64;
+                if fully_dense {
+                    // Bulk fill: column-major data order matches emission order
+                    result.data.extend_from_slice(data);
+                    for c in 0..*a_cols {
+                        let out_col = col_base + c as i64;
+                        for r in 0..*a_rows {
+                            result.rows.push(row_base + r as i64);
+                            result.cols.push(out_col);
+                        }
+                    }
+                    result
+                        .param_offsets
+                        .extend(std::iter::repeat(param_offset).take(a_rows * a_cols));
+                } else {
+                    for c in 0..*a_cols {
+                        let out_col = col_base + c as i64;
+                        let col_start = c * a_rows;
+                        for (r, &val) in data[col_start..col_start + a_rows].iter().enumerate() {
+                            if val != 0.0 {
+                                result.push(val, row_base + r as i64, out_col, param_offset);
+                            }
+                        }
+                    }
+                }
+            }
+            Some(result)
+        }
+
+        ConstantMatrix::DenseRowMajor {
+            data,
+            rows: a_rows,
+            cols: a_cols,
+        } => {
+            let num_blocks = checked_num_blocks(arg_size, *a_cols)?;
+            if num_blocks * a_rows != output_rows {
+                return None;
+            }
+            let a_nnz = data.iter().filter(|&&v| v != 0.0).count();
+            let mut result = SparseTensor::with_capacity(out_shape, a_nnz * num_blocks);
+            for b in 0..num_blocks {
+                let row_base = (b * a_rows) as i64;
+                let col_base = var_col + (b * a_cols) as i64;
+                for c in 0..*a_cols {
+                    let out_col = col_base + c as i64;
+                    for r in 0..*a_rows {
+                        let val = data[r * a_cols + c];
+                        if val != 0.0 {
+                            result.push(val, row_base + r as i64, out_col, param_offset);
+                        }
+                    }
+                }
+            }
+            Some(result)
+        }
+
+        ConstantMatrix::Sparse {
+            values,
+            row_indices,
+            col_indptr,
+            rows: a_rows,
+            cols: a_cols,
+        } => {
+            let num_blocks = checked_num_blocks(arg_size, *a_cols)?;
+            if num_blocks * a_rows != output_rows || col_indptr.len() < a_cols + 1 {
+                return None;
+            }
+            let a_nnz = values.iter().filter(|&&v| v != 0.0).count();
+            let mut result = SparseTensor::with_capacity(out_shape, a_nnz * num_blocks);
+            for b in 0..num_blocks {
+                let row_base = (b * a_rows) as i64;
+                let col_base = var_col + (b * a_cols) as i64;
+                for c in 0..*a_cols {
+                    let out_col = col_base + c as i64;
+                    let start = col_indptr[c] as usize;
+                    let end = col_indptr[c + 1] as usize;
+                    for k in start..end {
+                        let val = values[k];
+                        if val != 0.0 {
+                            result.push(val, row_base + row_indices[k], out_col, param_offset);
+                        }
+                    }
+                }
+            }
+            Some(result)
+        }
+    }
 }
 
 /// Block diagonal multiplication from left: kron(I, A) @ tensor
@@ -1363,6 +1554,75 @@ mod tests {
         for &v in &tensor.data {
             assert_eq!(v, -1.0);
         }
+    }
+
+    #[test]
+    fn test_mul_fast_path_matches_slow_path_matrix_variable() {
+        // A (2x3) @ X (3x2): the multi-block case (k=2 identity blocks).
+        // The fast path must emit kron(I_2, A) — nnz(A) entries PER block —
+        // not just A's entries once.
+        let mut id_to_col = HashMap::new();
+        id_to_col.insert(1, 0);
+        let mut param_to_col = HashMap::new();
+        param_to_col.insert(CONSTANT_ID, 0);
+        let mut param_to_size = HashMap::new();
+        param_to_size.insert(CONSTANT_ID, 1);
+        let ctx = ProcessingContext {
+            id_to_col,
+            param_to_col,
+            param_to_size,
+            var_length: 6,
+            param_size_plus_one: 1,
+        };
+
+        // A = [[1, 0, 2], [0, 3, 4]] stored column-major
+        let a_data: Arc<[f64]> = vec![1.0, 0.0, 0.0, 3.0, 2.0, 4.0].into();
+        let const_op = LinOp {
+            op_type: OpType::DenseConst,
+            shape: vec![2, 3],
+            args: vec![],
+            data: LinOpData::DenseArray {
+                data: a_data,
+                shape: vec![2, 3],
+            },
+        };
+        let var_op = LinOp {
+            op_type: OpType::Variable,
+            shape: vec![3, 2],
+            args: vec![],
+            data: LinOpData::Int(1),
+        };
+        let mul_op = LinOp {
+            op_type: OpType::Mul,
+            shape: vec![2, 2],
+            args: vec![var_op],
+            data: LinOpData::LinOpRef(Box::new(const_op)),
+        };
+
+        // Fast path (taken automatically for const @ plain variable)
+        let fast = process_mul(&mul_op, &ctx);
+
+        // Slow path: materialize X's identity tensor, then general multiply
+        let rhs = process_linop(&mul_op.args[0], &ctx);
+        let lhs_data = match &mul_op.data {
+            LinOpData::LinOpRef(inner) => get_constant_matrix_data(inner, Some(&ctx)),
+            _ => unreachable!(),
+        };
+        let slow = multiply_block_diagonal(&lhs_data, &rhs, &mul_op, &ctx, false);
+
+        // nnz(A) = 4, two blocks
+        assert_eq!(fast.nnz(), 8);
+        assert_eq!(fast.shape, slow.shape);
+
+        let to_map = |t: &SparseTensor| {
+            let mut m: HashMap<(i64, i64, i64), f64> = HashMap::new();
+            for i in 0..t.nnz() {
+                *m.entry((t.rows[i], t.cols[i], t.param_offsets[i]))
+                    .or_insert(0.0) += t.data[i];
+            }
+            m
+        };
+        assert_eq!(to_map(&fast), to_map(&slow));
     }
 
     #[test]
