@@ -161,9 +161,10 @@ pub fn process_trace(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 
     let n = arg_shape[0]; // Assumes square matrix
 
-    // Diagonal indices for n x n matrix (flattened in Fortran order)
-    // Diagonal entry (i, i) has flat index i + i*n = i*(n+1)
-    let diag_indices: Vec<i64> = (0..n).map(|i| (i * (n + 1)) as i64).collect();
+    // Diagonal entry (i, i) has Fortran-order flat index i + i*n = i*(n+1);
+    // every multiple of n+1 below n*n is on the diagonal, so an O(1)
+    // arithmetic test replaces scanning an index list per entry.
+    let step = (n + 1) as i64;
 
     // Select diagonal entries and sum to single row
     let mut result =
@@ -171,7 +172,7 @@ pub fn process_trace(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 
     for i in 0..tensor.nnz() {
         let row = tensor.rows[i];
-        if diag_indices.contains(&row) {
+        if row % step == 0 {
             result.push(tensor.data[i], 0, tensor.cols[i], tensor.param_offsets[i]);
         }
     }
@@ -252,34 +253,29 @@ pub fn process_diag_mat(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor
     let rows = lin_op.shape[0]; // Output size
     let orig_rows = arg_shape.first().copied().unwrap_or(1);
 
-    // Compute diagonal indices in the original matrix
-    let diag_indices: Vec<i64> = (0..rows)
-        .map(|i| {
-            if k == 0 {
-                (i * (orig_rows + 1)) as i64
-            } else if k > 0 {
-                (i + (i + k as usize) * orig_rows) as i64
-            } else {
-                ((i + (-k) as usize) + i * orig_rows) as i64
-            }
-        })
-        .collect();
+    // The diagonal flat index for output row i is i*(orig_rows+1) + offset
+    // (offset = k*orig_rows for k>0, -k for k<0, 0 for k=0), so the reverse
+    // mapping is O(1) arithmetic instead of scanning an index list per entry.
+    let step = (orig_rows + 1) as i64;
+    let offset: i64 = if k > 0 { k * orig_rows as i64 } else { -k };
 
-    // Build reverse mapping from original index to new index
     let mut result = SparseTensor::with_capacity(
         (rows, ctx.var_length as usize + 1),
         tensor.nnz() / orig_rows.max(1),
     );
 
     for i in 0..tensor.nnz() {
-        let row = tensor.rows[i];
-        if let Some(new_row) = diag_indices.iter().position(|&d| d == row) {
-            result.push(
-                tensor.data[i],
-                new_row as i64,
-                tensor.cols[i],
-                tensor.param_offsets[i],
-            );
+        let t = tensor.rows[i] - offset;
+        if t >= 0 && t % step == 0 {
+            let new_row = t / step;
+            if (new_row as usize) < rows {
+                result.push(
+                    tensor.data[i],
+                    new_row,
+                    tensor.cols[i],
+                    tensor.param_offsets[i],
+                );
+            }
         }
     }
 
@@ -300,27 +296,32 @@ pub fn process_upper_tri(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTenso
 
     let n = arg_shape.first().copied().unwrap_or(1);
 
-    // Compute upper triangular indices (k=1, excluding diagonal)
-    // Must iterate rows first (i outer), then columns (j > i) to match SciPy's np.triu_indices_from ordering
-    let mut upper_indices = Vec::new();
+    // Map each upper-triangular Fortran flat index (i + j*n, j > i) to its
+    // output row. Numbering iterates rows first (i outer), then columns
+    // (j > i), matching SciPy's np.triu_indices_from ordering. A lookup
+    // table gives O(1) per entry instead of an O(n^2) position scan.
+    let out_rows = n * n.saturating_sub(1) / 2;
+    let mut new_row_of = vec![-1i64; n * n];
+    let mut counter = 0i64;
     for i in 0..n.saturating_sub(1) {
         for j in (i + 1)..n {
-            upper_indices.push((i + j * n) as i64); // Fortran order: idx = row + col * n_rows
+            new_row_of[i + j * n] = counter; // Fortran order: idx = row + col * n_rows
+            counter += 1;
         }
     }
 
     // Select upper triangular entries and renumber
     let mut result = SparseTensor::with_capacity(
-        (upper_indices.len(), ctx.var_length as usize + 1),
+        (out_rows, ctx.var_length as usize + 1),
         tensor.nnz() / 2,
     );
 
     for i in 0..tensor.nnz() {
-        let row = tensor.rows[i];
-        if let Some(new_row) = upper_indices.iter().position(|&u| u == row) {
+        let row = tensor.rows[i] as usize;
+        if row < new_row_of.len() && new_row_of[row] >= 0 {
             result.push(
                 tensor.data[i],
-                new_row as i64,
+                new_row_of[row],
                 tensor.cols[i],
                 tensor.param_offsets[i],
             );
