@@ -467,62 +467,69 @@ impl LinOp {
 
 /// Context for deserializing LinOp trees from pre-serialized Python data.
 ///
-/// The Python side serializes the tree in pre-order traversal into a flat list
-/// of node tuples, plus contiguous float/int buffers for array data.
-/// This avoids per-node Python attribute access (the main FFI bottleneck).
-pub struct DeserializationContext<'a, 'py> {
-    nodes: &'a [Bound<'py, PyTuple>],
+/// The Python side serializes the trees in pre-order traversal into a flat
+/// i64 metadata stream (`node_meta`), plus contiguous float/int buffers for
+/// array data.  Deserialization is therefore a single pass over three
+/// borrowed slices and touches no Python objects at all.
+///
+/// Per-node layout in `node_meta` (see serialize_linop_trees in
+/// canon_backend.py, which must stay in sync):
+///   [op_type, ndim, shape.., num_args, data_tag, payload..]
+pub struct DeserializationContext<'a> {
+    meta: &'a [i64],
     float_data: &'a [f64],
     int_data: &'a [i64],
     pub cursor: usize,
 }
 
-impl<'a, 'py> DeserializationContext<'a, 'py> {
-    pub fn new(
-        nodes: &'a [Bound<'py, PyTuple>],
-        float_data: &'a [f64],
-        int_data: &'a [i64],
-    ) -> Self {
+impl<'a> DeserializationContext<'a> {
+    pub fn new(meta: &'a [i64], float_data: &'a [f64], int_data: &'a [i64]) -> Self {
         DeserializationContext {
-            nodes,
+            meta,
             float_data,
             int_data,
             cursor: 0,
         }
     }
 
+    /// True when the whole metadata stream has been consumed.
+    pub fn done(&self) -> bool {
+        self.cursor >= self.meta.len()
+    }
+
+    #[inline]
+    fn next(&mut self) -> PyResult<i64> {
+        match self.meta.get(self.cursor) {
+            Some(&v) => {
+                self.cursor += 1;
+                Ok(v)
+            }
+            None => Err(pyo3::exceptions::PyValueError::new_err(
+                "Unexpected end of serialized node stream",
+            )),
+        }
+    }
+
     /// Read the next LinOp from the stream (recursive, pre-order)
     pub fn read_linop(&mut self) -> PyResult<LinOp> {
-        if self.cursor >= self.nodes.len() {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "Unexpected end of serialized node stream",
-            ));
+        let op_type = OpType::from_int(self.next()? as u8)?;
+
+        let ndim = self.next()? as usize;
+        let mut shape = Vec::with_capacity(ndim);
+        for _ in 0..ndim {
+            shape.push(self.next()? as usize);
         }
 
-        let node = &self.nodes[self.cursor];
-        self.cursor += 1;
+        let num_args = self.next()? as usize;
+        let data_tag = self.next()?;
 
-        let op_type_int: u8 = node.get_item(0)?.extract()?;
-        let op_type = OpType::from_int(op_type_int)?;
-
-        let shape: Vec<usize> = node.get_item(1)?.extract()?;
-        let num_args: usize = node.get_item(2)?.extract()?;
-        let data_tag: u8 = node.get_item(3)?.extract()?;
-        let payload = node.get_item(4)?;
-        let has_data_linop: u8 = node.get_item(5)?.extract()?;
-
-        // Extract non-LinOpRef data
-        let data = self.extract_data(data_tag, &payload)?;
-
-        // If data is a LinOpRef, read the inline data LinOp (serialized before args)
-        let data = if has_data_linop == 1 {
-            let data_linop = self.read_linop()?;
-            LinOpData::LinOpRef(Box::new(data_linop))
+        let data = if data_tag == 6 {
+            // LinOpRef: the data LinOp is serialized inline, before the args
+            LinOpData::LinOpRef(Box::new(self.read_linop()?))
         } else {
-            data
+            self.extract_data(data_tag)?
         };
 
-        // Read args in order
         let mut args = Vec::with_capacity(num_args);
         for _ in 0..num_args {
             args.push(self.read_linop()?);
@@ -536,47 +543,39 @@ impl<'a, 'py> DeserializationContext<'a, 'py> {
         })
     }
 
-    fn extract_data(
-        &self,
-        data_tag: u8,
-        payload: &Bound<'py, PyAny>,
-    ) -> PyResult<LinOpData> {
+    fn extract_data(&mut self, data_tag: i64) -> PyResult<LinOpData> {
         match data_tag {
             0 => Ok(LinOpData::None),
 
-            1 => {
-                // Int
-                let v: i64 = payload.extract()?;
-                Ok(LinOpData::Int(v))
-            }
+            1 => Ok(LinOpData::Int(self.next()?)),
 
-            2 => {
-                // Float
-                let v: f64 = payload.extract()?;
-                Ok(LinOpData::Float(v))
-            }
+            // Float: f64 bit-pattern stored as i64
+            2 => Ok(LinOpData::Float(f64::from_bits(self.next()? as u64))),
 
             3 => {
-                // DenseArray: (float_offset, float_len, shape_tuple)
-                let tup: &Bound<'py, PyTuple> = payload.downcast()?;
-                let offset: usize = tup.get_item(0)?.extract()?;
-                let len: usize = tup.get_item(1)?.extract()?;
-                let shape: Vec<usize> = tup.get_item(2)?.extract()?;
+                // DenseArray: [float_off, float_len, ndim, shape..]
+                let offset = self.next()? as usize;
+                let len = self.next()? as usize;
+                let ndim = self.next()? as usize;
+                let mut shape = Vec::with_capacity(ndim);
+                for _ in 0..ndim {
+                    shape.push(self.next()? as usize);
+                }
                 let data = Arc::from(&self.float_data[offset..offset + len]);
                 Ok(LinOpData::DenseArray { data, shape })
             }
 
             4 => {
-                // SparseArray: (f_off, f_len, i_off_idx, i_len_idx, i_off_ptr, i_len_ptr, nrows, ncols)
-                let tup: &Bound<'py, PyTuple> = payload.downcast()?;
-                let f_off: usize = tup.get_item(0)?.extract()?;
-                let f_len: usize = tup.get_item(1)?.extract()?;
-                let i_off_idx: usize = tup.get_item(2)?.extract()?;
-                let i_len_idx: usize = tup.get_item(3)?.extract()?;
-                let i_off_ptr: usize = tup.get_item(4)?.extract()?;
-                let i_len_ptr: usize = tup.get_item(5)?.extract()?;
-                let nrows: usize = tup.get_item(6)?.extract()?;
-                let ncols: usize = tup.get_item(7)?.extract()?;
+                // SparseArray: [f_off, f_len, i_off_idx, i_len_idx,
+                //               i_off_ptr, i_len_ptr, nrows, ncols]
+                let f_off = self.next()? as usize;
+                let f_len = self.next()? as usize;
+                let i_off_idx = self.next()? as usize;
+                let i_len_idx = self.next()? as usize;
+                let i_off_ptr = self.next()? as usize;
+                let i_len_ptr = self.next()? as usize;
+                let nrows = self.next()? as usize;
+                let ncols = self.next()? as usize;
 
                 let data = Arc::from(&self.float_data[f_off..f_off + f_len]);
                 let indices = Arc::from(&self.int_data[i_off_idx..i_off_idx + i_len_idx]);
@@ -591,45 +590,47 @@ impl<'a, 'py> DeserializationContext<'a, 'py> {
             }
 
             5 => {
-                // Slices: list of (start, stop, step) tuples
-                let list: Vec<(i64, i64, i64)> = payload.extract()?;
-                let slices = list
-                    .into_iter()
-                    .map(|(start, stop, step)| SliceData { start, stop, step })
-                    .collect();
+                // Slices: [n, (start, stop, step) * n]
+                let n = self.next()? as usize;
+                let mut slices = Vec::with_capacity(n);
+                for _ in 0..n {
+                    let start = self.next()?;
+                    let stop = self.next()?;
+                    let step = self.next()?;
+                    slices.push(SliceData { start, stop, step });
+                }
                 Ok(LinOpData::Slices(slices))
             }
 
-            6 => {
-                // LinOpRef placeholder — handled by caller
-                Ok(LinOpData::None)
-            }
-
             7 => {
-                // AxisData: (axis_spec, keepdims)
-                let tup: &Bound<'py, PyTuple> = payload.downcast()?;
-                let axis_obj = tup.get_item(0)?;
-                let keepdims: bool = tup.get_item(1)?.extract()?;
-                let axis = if axis_obj.is_none() {
-                    None
-                } else if let Ok(single) = axis_obj.extract::<i64>() {
-                    Some(AxisSpec::Single(single))
-                } else if let Ok(multi) = axis_obj.extract::<Vec<i64>>() {
-                    Some(AxisSpec::Multiple(multi))
-                } else {
-                    None
+                // AxisData: [kind(0 none/1 single/2 multi), .., keepdims]
+                let axis = match self.next()? {
+                    0 => None,
+                    1 => Some(AxisSpec::Single(self.next()?)),
+                    2 => {
+                        let n = self.next()? as usize;
+                        let mut axes = Vec::with_capacity(n);
+                        for _ in 0..n {
+                            axes.push(self.next()?);
+                        }
+                        Some(AxisSpec::Multiple(axes))
+                    }
+                    k => {
+                        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                            "Unknown axis kind: {}",
+                            k
+                        )))
+                    }
                 };
+                let keepdims = self.next()? != 0;
                 Ok(LinOpData::AxisData { axis, keepdims })
             }
 
             8 => {
-                // ConcatAxis
-                if payload.is_none() {
-                    Ok(LinOpData::ConcatAxis(None))
-                } else {
-                    let v: i64 = payload.extract()?;
-                    Ok(LinOpData::ConcatAxis(Some(v)))
-                }
+                // ConcatAxis: [has, value]
+                let has = self.next()?;
+                let value = self.next()?;
+                Ok(LinOpData::ConcatAxis(if has != 0 { Some(value) } else { None }))
             }
 
             _ => Err(pyo3::exceptions::PyValueError::new_err(format!(

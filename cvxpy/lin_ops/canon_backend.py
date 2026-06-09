@@ -15,6 +15,7 @@ limitations under the License.
 """
 from __future__ import annotations
 
+import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -691,106 +692,153 @@ _OP_TYPE_MAP = {
 # Op types whose data field is itself a LinOp tree
 _LINOP_DATA_OPS = {"mul", "rmul", "mul_elem", "div", "conv", "kron_l", "kron_r"}
 
+_PACK_F64 = struct.Struct('<d').pack
+_UNPACK_I64 = struct.Struct('<q').unpack
+
+
+def _F64_BITS(v: float) -> int:
+    """Bit-pattern of a float64 as a signed i64 (for the metadata stream)."""
+    return _UNPACK_I64(_PACK_F64(v))[0]
+
+
+def _append_axis_data(meta: list, axis, keepdims) -> None:
+    """Append an AxisData payload (tag 7) to the metadata stream."""
+    meta.append(7)
+    if axis is None:
+        meta.append(0)
+    elif isinstance(axis, (int, np.integer)):
+        meta.append(1)
+        meta.append(int(axis))
+    else:
+        axes = list(axis)
+        meta.append(2)
+        meta.append(len(axes))
+        meta.extend(int(a) for a in axes)
+    meta.append(1 if keepdims else 0)
+
 
 def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
     """
     Serialize a list of LinOp trees into flat buffers for the Rust backend.
 
     Walks the trees in pre-order and packs:
-    - nodes: list of tuples (op_type_int, shape, num_args, data_tag, payload, has_data_linop)
+    - node_meta: np.ndarray[i64] — all node metadata as one flat stream, so
+      Rust deserialization is a single pass over a borrowed slice with no
+      per-node Python object access at all
     - float_data: np.ndarray[f64] with all dense array / sparse value data concatenated
     - int_data: np.ndarray[i64] with all sparse indices / indptr data concatenated
 
-    Data tags:
-      0=None, 1=Int, 2=Float, 3=DenseArray, 4=SparseArray,
-      5=Slices, 6=LinOpRef(placeholder), 7=AxisData, 8=ConcatAxis
+    Per-node layout in node_meta (must stay in sync with
+    DeserializationContext in cvxpy_rust/src/linop.rs):
+      [op_type, ndim, *shape, num_args, data_tag, *payload]
+
+    Payloads by data tag:
+      0=None: ()                      1=Int: (value,)
+      2=Float: (float64 bits as i64,) 3=DenseArray: (f_off, f_len, ndim, *shape)
+      4=SparseArray: (f_off, f_len, i_off_idx, i_len_idx, i_off_ptr,
+                      i_len_ptr, nrows, ncols)
+      5=Slices: (n, *(start, stop, step) per slice)
+      6=LinOpRef: () — the data LinOp follows inline, before this node's args
+      7=AxisData: (kind 0|1|2, [value | n, *axes], keepdims)
+      8=ConcatAxis: (has, value)
     """
-    nodes: list[tuple] = []
+    meta: list[int] = []
     float_chunks: list[np.ndarray] = []
     int_chunks: list[np.ndarray] = []
     float_offset = 0
     int_offset = 0
 
+    # Hot path: bound-method/global lookups hoisted to locals; one extend
+    # with a single tuple literal per node in the common cases; f64
+    # bit-pattern via struct (much cheaper than np scalar .view()).
+    extend = meta.extend
+    op_map = _OP_TYPE_MAP
+    linop_data_ops = _LINOP_DATA_OPS
+    f64_bits = _F64_BITS
+
     def _serialize_node(lin_op):
         nonlocal float_offset, int_offset
 
-        op_type_int = _OP_TYPE_MAP[lin_op.type]
-        shape = tuple(lin_op.shape)
-        num_args = len(lin_op.args)
-        has_data_linop = lin_op.type in _LINOP_DATA_OPS and lin_op.data is not None
+        t = lin_op.type
+        shape = lin_op.shape
+        nargs = len(lin_op.args)
+        data = lin_op.data
 
-        # Determine data tag and payload
-        if lin_op.data is None:
-            data_tag, payload = 0, None
+        has_data_linop = False
 
-        elif lin_op.type in ("variable", "param"):
-            data_tag, payload = 1, int(lin_op.data)
+        if data is None:
+            extend((op_map[t], len(shape), *shape, nargs, 0))
 
-        elif lin_op.type == "scalar_const":
-            data_tag, payload = 2, float(lin_op.data)
+        elif t in ("variable", "param", "diag_vec", "diag_mat"):
+            extend((op_map[t], len(shape), *shape, nargs, 1, int(data)))
 
-        elif lin_op.type == "dense_const":
-            arr = np.asarray(lin_op.data, dtype=np.float64)
+        elif t == "scalar_const":
+            extend((op_map[t], len(shape), *shape, nargs, 2, f64_bits(float(data))))
+
+        elif t == "dense_const":
+            arr = np.asarray(data, dtype=np.float64)
             flat = arr.ravel(order='F')
             float_chunks.append(flat)
-            payload = (float_offset, len(flat), tuple(arr.shape))
-            float_offset += len(flat)
-            data_tag = 3
+            n = len(flat)
+            extend((op_map[t], len(shape), *shape, nargs,
+                    3, float_offset, n, arr.ndim, *arr.shape))
+            float_offset += n
 
-        elif lin_op.type == "sparse_const":
-            csc = sp.csc_array(lin_op.data)
+        elif t in linop_data_ops:
+            # Data is a LinOp — serialized inline after this node, before args
+            extend((op_map[t], len(shape), *shape, nargs, 6))
+            has_data_linop = True
+
+        elif t == "sparse_const":
+            csc = sp.csc_array(data)
             vals = np.asarray(csc.data, dtype=np.float64)
             indices = np.asarray(csc.indices, dtype=np.int64)
             indptr = np.asarray(csc.indptr, dtype=np.int64)
             float_chunks.append(vals)
             int_chunks.append(indices)
             int_chunks.append(indptr)
-            payload = (
+            extend((
+                op_map[t], len(shape), *shape, nargs,
+                4,
                 float_offset, len(vals),
                 int_offset, len(indices),
                 int_offset + len(indices), len(indptr),
                 csc.shape[0], csc.shape[1],
-            )
+            ))
             float_offset += len(vals)
             int_offset += len(indices) + len(indptr)
-            data_tag = 4
 
-        elif lin_op.type == "index":
-            slices = [(s.start, s.stop, s.step) for s in lin_op.data]
-            data_tag, payload = 5, slices
+        elif t == "index":
+            extend((op_map[t], len(shape), *shape, nargs, 5, len(data)))
+            for s in data:
+                extend((int(s.start), int(s.stop), int(s.step)))
 
-        elif lin_op.type in _LINOP_DATA_OPS:
-            # Data is a LinOp — serialized inline after this node, before args
-            data_tag, payload = 6, None
+        elif t == "sum_entries":
+            extend((op_map[t], len(shape), *shape, nargs))
+            axis = data[0]
+            keepdims = bool(data[1]) if len(data) > 1 else False
+            _append_axis_data(meta, axis, keepdims)
 
-        elif lin_op.type in ("diag_vec", "diag_mat"):
-            data_tag, payload = 1, int(lin_op.data)
-
-        elif lin_op.type == "sum_entries":
-            axis = lin_op.data[0]
-            keepdims = bool(lin_op.data[1]) if len(lin_op.data) > 1 else False
-            data_tag, payload = 7, (axis, keepdims)
-
-        elif lin_op.type == "transpose":
-            if lin_op.data is not None and len(lin_op.data) > 0:
-                axes = lin_op.data[0]
-                data_tag, payload = 7, (axes, False)
+        elif t == "transpose":
+            if len(data) > 0:
+                extend((op_map[t], len(shape), *shape, nargs))
+                _append_axis_data(meta, data[0], False)
             else:
-                data_tag, payload = 0, None
+                extend((op_map[t], len(shape), *shape, nargs, 0))
 
-        elif lin_op.type == "concatenate":
-            axis = lin_op.data[0] if lin_op.data else None
-            data_tag, payload = 8, axis
+        elif t == "concatenate":
+            axis = data[0] if data else None
+            if axis is None:
+                extend((op_map[t], len(shape), *shape, nargs, 8, 0, 0))
+            else:
+                extend((op_map[t], len(shape), *shape, nargs, 8, 1, int(axis)))
 
         else:
-            data_tag, payload = 0, None
-
-        nodes.append((op_type_int, shape, num_args, data_tag, payload,
-                       1 if has_data_linop else 0))
+            extend((op_map[t], len(shape), *shape, nargs, 0))
 
         # If data is a LinOp, serialize it BEFORE args
         if has_data_linop:
-            _serialize_node(lin_op.data)
+            _serialize_node(data)
 
         # Serialize args in order
         for arg in lin_op.args:
@@ -798,6 +846,8 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
 
     for lin_op in lin_ops:
         _serialize_node(lin_op)
+
+    node_meta = np.array(meta, dtype=np.int64)
 
     # Concatenate buffers
     if float_chunks:
@@ -810,7 +860,7 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
     else:
         int_data = np.empty(0, dtype=np.int64)
 
-    return nodes, float_data, int_data
+    return node_meta, float_data, int_data
 
 
 class RustCanonBackend(CanonBackend):
