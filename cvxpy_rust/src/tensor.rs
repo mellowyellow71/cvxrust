@@ -261,21 +261,6 @@ impl SparseTensor {
         result
     }
 
-    /// Combine multiple tensors into one (concatenate all entries)
-    pub fn combine(tensors: Vec<SparseTensor>) -> SparseTensor {
-        if tensors.is_empty() {
-            return SparseTensor::empty((0, 0));
-        }
-
-        let total_nnz: usize = tensors.iter().map(|t| t.nnz()).sum();
-        let shape = tensors[0].shape;
-
-        let mut result = SparseTensor::with_capacity(shape, total_nnz);
-        for tensor in tensors {
-            result.extend(tensor);
-        }
-        result
-    }
 }
 
 /// Builder for SparseTensor with efficient accumulation

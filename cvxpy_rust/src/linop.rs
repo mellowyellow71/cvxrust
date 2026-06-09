@@ -417,23 +417,6 @@ impl LinOp {
         self.shape.iter().product()
     }
 
-    /// Returns true if this subtree contains any Param nodes.
-    ///
-    /// Used by the cached graph to decide which constraints need
-    /// re-processing when parameter values change.
-    pub fn has_param(&self) -> bool {
-        if self.op_type == OpType::Param {
-            return true;
-        }
-        // Check data LinOp (for Mul/Rmul/MulElem/etc.)
-        if let LinOpData::LinOpRef(ref inner) = self.data {
-            if inner.has_param() {
-                return true;
-            }
-        }
-        self.args.iter().any(|a| a.has_param())
-    }
-
     /// Estimate the number of non-zeros for pre-allocation
     pub fn estimate_nnz(&self) -> usize {
         match self.op_type {
