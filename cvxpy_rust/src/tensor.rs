@@ -3,10 +3,18 @@
 //! This module provides the SparseTensor type which stores 3D tensor data
 //! in coordinate (COO) format, matching CVXPY's TensorRepresentation.
 
+use rayon::prelude::*;
 use std::collections::HashMap;
 
 /// Constant ID used for non-parametric entries
 pub const CONSTANT_ID: i64 = -1;
+
+/// Below this nnz count, sort the output serially. Rayon's global thread
+/// pool is initialized lazily on first parallel call, and that one-time
+/// init cost dominates total build time for small problems (measured on
+/// the LASSO benchmarks: serial sort took small problems from 0.50x to
+/// 1.21x vs SciPy). Above the threshold the parallel sort amortizes it.
+const PAR_SORT_MIN_NNZ: usize = 1_000_000;
 
 /// Sparse tensor in COO format
 ///
@@ -384,6 +392,28 @@ impl BuildMatrixResult {
             tensor.rows[i] = tensor.cols[i] * n_rows_i64 + tensor.rows[i];
         }
 
+        // Sort entries by flattened row before returning. SciPy's COO->CSC
+        // constructor uses a stable counting sort on the major (param) axis,
+        // so globally row-sorted input keeps rows sorted within every column
+        // and its sort_indices()/sum_duplicates() degrade to linear verify
+        // passes; np.unique in reduce_problem_data_tensor likewise hits its
+        // sorted fast path. Entries often arrive already sorted (single
+        // constraint, identity-like tensors), so check first and skip the
+        // permutation entirely in that case.
+        let nnz = tensor.rows.len();
+        let already_sorted = tensor.rows.windows(2).all(|w| w[0] <= w[1]);
+        if !already_sorted {
+            let mut order: Vec<usize> = (0..nnz).collect();
+            if nnz < PAR_SORT_MIN_NNZ {
+                order.sort_unstable_by_key(|&i| tensor.rows[i]);
+            } else {
+                order.par_sort_unstable_by_key(|&i| tensor.rows[i]);
+            }
+            tensor.data = order.iter().map(|&i| tensor.data[i]).collect();
+            tensor.param_offsets = order.iter().map(|&i| tensor.param_offsets[i]).collect();
+            tensor.rows = order.iter().map(|&i| tensor.rows[i]).collect();
+        }
+
         BuildMatrixResult {
             data: tensor.data,
             rows: tensor.rows,
@@ -429,5 +459,36 @@ mod tests {
         assert_eq!(tensor.data, vec![1.0, 1.0, 1.0]);
         assert_eq!(tensor.rows, vec![0, 1, 2]);
         assert_eq!(tensor.cols, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn test_from_tensor_sorts_by_flat_row() {
+        // Entries deliberately out of flat-row order: flat_row = col * n_rows + row
+        let mut tensor = SparseTensor::empty((3, 2));
+        tensor.push(1.0, 2, 1, 0); // flat_row = 1*3 + 2 = 5
+        tensor.push(2.0, 0, 0, 7); // flat_row = 0
+        tensor.push(3.0, 1, 1, 0); // flat_row = 4
+        tensor.push(4.0, 2, 0, 3); // flat_row = 2
+
+        let result = BuildMatrixResult::from_tensor(tensor, 8);
+
+        assert_eq!(result.rows, vec![0, 2, 4, 5]);
+        assert_eq!(result.data, vec![2.0, 4.0, 3.0, 1.0]);
+        // param_offsets must be permuted in lockstep with data/rows
+        assert_eq!(result.cols, vec![7, 3, 0, 0]);
+        assert_eq!(result.shape, (6, 8));
+    }
+
+    #[test]
+    fn test_from_tensor_already_sorted_passthrough() {
+        let mut tensor = SparseTensor::empty((2, 2));
+        tensor.push(1.0, 0, 0, 0); // flat_row = 0
+        tensor.push(2.0, 1, 0, 0); // flat_row = 1
+        tensor.push(3.0, 0, 1, 0); // flat_row = 2
+
+        let result = BuildMatrixResult::from_tensor(tensor, 1);
+
+        assert_eq!(result.rows, vec![0, 1, 2]);
+        assert_eq!(result.data, vec![1.0, 2.0, 3.0]);
     }
 }

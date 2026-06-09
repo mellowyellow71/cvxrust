@@ -13,7 +13,7 @@ mod matrix_builder;
 mod operations;
 mod tensor;
 
-use numpy::{PyArray1, PyReadonlyArray1, ToPyArray};
+use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use std::collections::HashMap;
@@ -70,9 +70,10 @@ fn build_matrix<'py>(
     });
 
     // Convert to numpy arrays
-    let data = result.data.to_pyarray(py).into();
-    let rows = result.rows.to_pyarray(py).into();
-    let cols = result.cols.to_pyarray(py).into();
+    // into_pyarray moves the Vec into numpy (no copy), unlike to_pyarray
+    let data = result.data.into_pyarray(py).into();
+    let rows = result.rows.into_pyarray(py).into();
+    let cols = result.cols.into_pyarray(py).into();
     let shape = (result.shape.0 as i64, result.shape.1 as i64);
 
     Ok((data, (rows, cols), shape))
@@ -129,9 +130,10 @@ fn build_matrix_serialized<'py>(
     });
 
     // Convert to numpy arrays
-    let data = result.data.to_pyarray(py).into();
-    let rows = result.rows.to_pyarray(py).into();
-    let cols = result.cols.to_pyarray(py).into();
+    // into_pyarray moves the Vec into numpy (no copy), unlike to_pyarray
+    let data = result.data.into_pyarray(py).into();
+    let rows = result.rows.into_pyarray(py).into();
+    let cols = result.cols.into_pyarray(py).into();
     let shape = (result.shape.0 as i64, result.shape.1 as i64);
 
     Ok((data, (rows, cols), shape))
@@ -270,9 +272,10 @@ fn build_matrix_and_cache<'py>(
     // Build the matrix (also populates cache for non-parametric constraints)
     let result = graph.build();
 
-    let data = result.data.to_pyarray(py).into();
-    let rows = result.rows.to_pyarray(py).into();
-    let cols = result.cols.to_pyarray(py).into();
+    // into_pyarray moves the Vec into numpy (no copy), unlike to_pyarray
+    let data = result.data.into_pyarray(py).into();
+    let rows = result.rows.into_pyarray(py).into();
+    let cols = result.cols.into_pyarray(py).into();
     let shape = (result.shape.0 as i64, result.shape.1 as i64);
 
     let graph_py = Py::new(py, graph)?;
@@ -299,9 +302,10 @@ fn build_matrix_cached<'py>(
     let mut graph = graph.borrow_mut();
     let result = graph.build();
 
-    let data = result.data.to_pyarray(py).into();
-    let rows = result.rows.to_pyarray(py).into();
-    let cols = result.cols.to_pyarray(py).into();
+    // into_pyarray moves the Vec into numpy (no copy), unlike to_pyarray
+    let data = result.data.into_pyarray(py).into();
+    let rows = result.rows.into_pyarray(py).into();
+    let cols = result.cols.into_pyarray(py).into();
     let shape = (result.shape.0 as i64, result.shape.1 as i64);
 
     Ok((data, (rows, cols), shape))
