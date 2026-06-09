@@ -12,6 +12,7 @@ Produces reliable, cross-platform-comparable results by:
 
 Usage:
     python benchmark_suite.py                          # Default run
+    python benchmark_suite.py --backends RUST SCIPY CPP  # Include the C++ backend
     python benchmark_suite.py --quick                  # Fast run, fewer iterations
     python benchmark_suite.py --thorough               # More iterations for precision
     python benchmark_suite.py --single-thread           # Disable all parallelism
@@ -251,7 +252,7 @@ def extract_build_matrix_inputs(
 
     Returns a list of captured call dicts (one per get_problem_matrix invocation).
     Each dict contains: linOps, var_length, id_to_col, param_to_size,
-    param_to_col, param_size_plus_one.
+    param_to_col, param_size_plus_one, constr_length.
     """
     captured: list[dict] = []
     original_fn = canonInterface.get_problem_matrix
@@ -266,6 +267,7 @@ def extract_build_matrix_inputs(
             "param_to_size": dict(param_to_size),
             "param_to_col": dict(param_to_col),
             "param_size_plus_one": param_size_plus_one,
+            "constr_length": constr_length,
         })
         # Call original with SCIPY to complete the chain
         return original_fn(linOps, var_length, id_to_col, param_to_size,
@@ -284,6 +286,20 @@ def extract_build_matrix_inputs(
 def time_build_matrix(captured_call: dict, backend_name: str) -> float:
     """Time a single build_matrix call for a given backend. Returns ms."""
     c = captured_call
+    if backend_name == "CPP":
+        # The C++ backend is not registered in CanonBackend.get_backend —
+        # canonInterface.get_problem_matrix dispatches to it one level up.
+        # Time its dedicated entry point directly (the same thin layer the
+        # CanonBackend path adds for the other backends).
+        from cvxpy.cvxcore.python.cppbackend import build_matrix
+        return time_single(lambda: build_matrix(
+            dict(c["id_to_col"]),
+            dict(c["param_to_size"]),
+            dict(c["param_to_col"]),
+            c["var_length"],
+            c["constr_length"],
+            c["linOps"],
+        ))
     # Fresh copy of id_to_col because build_matrix mutates it
     backend = CanonBackend.get_backend(
         backend_name,
