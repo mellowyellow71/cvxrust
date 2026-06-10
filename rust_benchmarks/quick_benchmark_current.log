@@ -1,0 +1,95 @@
+======================================================================
+CVXPY Canonicalization Backend Benchmark (Cold Start)
+======================================================================
+Methodology: 10 fresh Python processes per measurement
+Backends: RUST, SCIPY, CPP
+
+--- Least Squares ---
+
+Least squares (n=50, m=100):
+  RUST :    5.0 ±  1.5 ms  (median:   4.5, range: 4-10)
+  SCIPY:    5.5 ±  1.1 ms  (median:   5.2, range: 5-9)
+  CPP  :    6.0 ±  1.9 ms  (median:   5.4, range: 5-12)
+  ---
+  RUST vs SCIPY: 1.11x
+  CPP vs SCIPY: 0.92x
+
+Least squares (n=200, m=500):
+  RUST :   16.0 ±  1.1 ms  (median:  15.7, range: 15-19)
+  SCIPY:   21.8 ±  0.5 ms  (median:  21.8, range: 21-23)
+  CPP  :   19.2 ±  1.8 ms  (median:  18.7, range: 18-24)
+  ---
+  RUST vs SCIPY: 1.36x
+  CPP vs SCIPY: 1.13x
+
+--- LASSO Problems ---
+
+LASSO (n=50, m=100):
+  RUST :    5.1 ±  0.1 ms  (median:   5.1, range: 5-5)
+  SCIPY:    6.3 ±  0.2 ms  (median:   6.3, range: 6-7)
+  CPP  :    6.4 ±  0.7 ms  (median:   6.2, range: 6-9)
+  ---
+  RUST vs SCIPY: 1.25x
+  CPP vs SCIPY: 0.99x
+
+LASSO (n=200, m=500):
+  RUST :   16.0 ±  0.4 ms  (median:  16.2, range: 15-16)
+  SCIPY:   24.9 ±  2.7 ms  (median:  24.2, range: 22-30)
+  CPP  :   22.9 ±  1.4 ms  (median:  22.8, range: 21-26)
+  ---
+  RUST vs SCIPY: 1.55x
+  CPP vs SCIPY: 1.08x
+
+--- Dense QP ---
+
+Dense QP (n=50):
+  RUST :    4.3 ±  0.1 ms  (median:   4.3, range: 4-4)
+  SCIPY:    4.8 ±  0.1 ms  (median:   4.8, range: 5-5)
+  CPP  :    5.4 ±  1.6 ms  (median:   4.9, range: 5-10)
+  ---
+  RUST vs SCIPY: 1.13x
+  CPP vs SCIPY: 0.89x
+
+Dense QP (n=200):
+  RUST :    4.8 ±  0.3 ms  (median:   4.7, range: 5-6)
+  SCIPY:    5.4 ±  0.1 ms  (median:   5.4, range: 5-6)
+  CPP  :    6.4 ±  1.6 ms  (median:   5.8, range: 5-10)
+  ---
+  RUST vs SCIPY: 1.14x
+  CPP vs SCIPY: 0.84x
+
+--- Many Constraints ---
+
+Many constraints (n=50, m=100):
+  RUST :   15.4 ±  2.1 ms  (median:  15.0, range: 13-19)
+  SCIPY:   63.1 ± 13.7 ms  (median:  58.2, range: 53-102)
+  CPP  :   18.3 ±  5.0 ms  (median:  15.7, range: 15-29)
+  ---
+  RUST vs SCIPY: 4.09x
+  CPP vs SCIPY: 3.44x
+
+Many constraints (n=50, m=500):
+  RUST :   52.3 ±  1.3 ms  (median:  51.7, range: 51-56)
+  SCIPY:  175.7 ± 10.6 ms  (median: 172.1, range: 169-207)
+  CPP  :   73.3 ±  5.2 ms  (median:  70.9, range: 68-83)
+  ---
+  RUST vs SCIPY: 3.36x
+  CPP vs SCIPY: 2.39x
+
+======================================================================
+SUMMARY
+======================================================================
+
+Problem                              RUST      SCIPY        CPP   RUST/SCIPY    CPP/SCIPY 
+---------------------------------------------------------------------------------------
+Least squares (n=50, m=100)         5.0ms      5.5ms      6.0ms       1.11x       0.92x 
+Least squares (n=200, m=500)       16.0ms     21.8ms     19.2ms       1.36x       1.13x 
+LASSO (n=50, m=100)                 5.1ms      6.3ms      6.4ms       1.25x       0.99x 
+LASSO (n=200, m=500)               16.0ms     24.9ms     22.9ms       1.55x       1.08x 
+Dense QP (n=50)                     4.3ms      4.8ms      5.4ms       1.13x       0.89x 
+Dense QP (n=200)                    4.8ms      5.4ms      6.4ms       1.14x       0.84x 
+Many constraints (n=50, m=100)     15.4ms     63.1ms     18.3ms       4.09x       3.44x 
+Many constraints (n=50, m=500)     52.3ms    175.7ms     73.3ms       3.36x       2.39x 
+
+RUST vs SCIPY: avg 1.87x, min 1.11x, max 4.09x, wins 8/8
+CPP vs SCIPY: avg 1.46x, min 0.84x, max 3.44x, wins 4/8
