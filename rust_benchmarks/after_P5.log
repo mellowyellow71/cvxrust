@@ -1,0 +1,116 @@
+============================================================
+CVXPY Canonicalization Benchmark Suite v1.0.0
+============================================================
+Machine: Darwin macOS-26.5-x86_64-i386-64bit-Mach-O / x86_64 / 10 cores
+CPU: Apple M5
+BLAS: scipy-openblas 0.3.31.dev
+Python 3.13.5 / NumPy 2.4.2 / SciPy 1.17.0 / CVXPY 1.8.0.dev0+199.141c454
+Rust backend: available
+Threads: RAYON=auto, OMP=1
+Git: 0a70a0346
+Mode: default | Layer: build_matrix | Backends: RUST, SCIPY | Seed: 42
+============================================================
+
+Running 40 problems across 2 backends...
+  Problem                                   RUST      SCIPY   SCIPY/RUST
+
+--- A: Arithmetic ---
+  dense_matmul (n=50)                     0.09ms!     0.18ms!    1.96x
+  dense_matmul (n=200)                    0.08ms!     0.15ms     1.90x
+  dense_matmul (n=500)                    0.07ms!     0.18ms!    2.39x
+  dense_matmul (n=1000)                   0.08ms!     0.16ms!    2.04x
+  sparse_matmul (n=100)                   0.08ms!     0.15ms     1.92x
+  sparse_matmul (n=500)                   0.07ms      0.15ms!    2.24x
+  sparse_matmul (n=2000)                  0.09ms!     0.15ms     1.70x
+  dense_qp (n=50)                         0.10ms!     0.43ms     4.47x
+  dense_qp (n=200)                        0.10ms!     0.44ms     4.58x
+  dense_qp (n=500)                        0.10ms!     0.46ms     4.53x
+
+--- B: Constraints ---
+  many_constraints (m=10)                 0.24ms      2.61ms    10.77x
+  many_constraints (m=50)                 0.44ms     12.35ms    27.77x
+  many_constraints (m=100)                0.69ms     24.73ms    35.86x
+  many_constraints (m=500)                2.52ms    121.81ms    48.42x
+  many_constraints (m=1000)               4.96ms    243.33ms    49.10x
+  many_constraints (m=5000)              24.54ms   1224.54ms    49.91x
+  box_constraints (n=50)                  0.10ms!     0.37ms     3.90x
+  box_constraints (n=200)                 0.13ms!     0.44ms!    3.30x
+  box_constraints (n=1000)                0.18ms      0.58ms     3.27x
+
+--- C: Structural ---
+  matrix_indexing (n=20)                  0.09ms!     0.19ms!    2.13x
+  matrix_indexing (n=50)                  0.09ms!     0.16ms     1.83x
+  matrix_indexing (n=100)                 0.08ms!     0.16ms     2.00x
+  hstack (width=10)                       0.14ms!     2.43ms    17.96x
+  hstack (width=50)                       0.22ms     11.20ms    50.92x
+  hstack (width=200)                      0.57ms     43.99ms    77.80x
+  portfolio (n=50)                        0.09ms      0.39ms     4.09x
+  portfolio (n=200)                       0.16ms!     0.45ms     2.73x
+  portfolio (n=500)                       0.15ms!     0.45ms     3.00x
+
+--- D: Specialized ---
+  lasso (n=50)                            0.21ms      0.93ms     4.55x
+  lasso (n=200)                           1.76ms      6.61ms     3.76x
+  lasso (n=500)                          14.14ms!    42.77ms     3.03x
+  lasso (n=1000)                         53.47ms    182.35ms     3.41x
+  svm (m=100)                             0.28ms      1.11ms!    4.00x
+  svm (m=500)                             1.29ms!     2.90ms!    2.26x
+  convolution (len=100)                   0.15ms!     0.22ms!    1.49x
+  convolution (len=500)                   0.15ms!     0.23ms!    1.59x
+
+--- E: Depth ---
+  nested_affine (depth=3)                 0.13ms!     0.17ms!    1.24x
+  nested_affine (depth=5)                 0.11ms!     0.22ms!    1.94x
+  nested_affine (depth=10)                0.09ms!     0.17ms     1.87x
+  nested_affine (depth=20)                0.09ms!     0.16ms     1.84x
+
+============================================================
+SUMMARY
+============================================================
+
+Layer: build_matrix
+  SCIPY/RUST: geomean 4.62x, arith mean 11.34x, range [1.24x, 77.80x], RUST wins 40/40
+  High variance (CV>10%): dense_matmul (n=50)/RUST (CV=17%), dense_matmul (n=50)/SCIPY (CV=13%), dense_matmul (n=200)/RUST (CV=14%), dense_matmul (n=500)/RUST (CV=12%), dense_matmul (n=500)/SCIPY (CV=20%)
+    ... and 32 more
+
+============================================================
+SCALING: Constraint Count Scaling
+============================================================
+Value              RUST      SCIPY    Speedup
+---------------------------------------------
+  4              0.19ms     1.28ms     6.86x
+  10             0.30ms     2.73ms     9.22x
+  50             0.47ms    12.57ms    26.74x
+  100            0.82ms    24.92ms    30.30x
+  500            2.83ms   122.26ms    43.19x
+  1000           4.85ms   251.72ms    51.89x
+  2000           9.68ms   518.21ms    53.54x
+  5000          24.54ms  1268.04ms    51.67x
+
+============================================================
+SCALING: Variable Size Scaling
+============================================================
+Value              RUST      SCIPY    Speedup
+---------------------------------------------
+  10             0.14ms     0.21ms     1.51x
+  50             0.11ms     0.23ms     2.05x
+  100            0.13ms     0.16ms     1.27x
+  500            0.08ms     0.14ms     1.91x
+  1000           0.09ms     0.22ms     2.50x
+  2000           0.07ms     0.14ms     1.90x
+  5000           0.07ms     0.15ms     2.35x
+
+============================================================
+SCALING: Matrix Density Scaling
+============================================================
+Value              RUST      SCIPY    Speedup
+---------------------------------------------
+  0.001          0.09ms     0.32ms     3.65x
+  0.01           0.08ms     0.32ms     3.71x
+  0.05           0.10ms     0.39ms     3.98x
+  0.1            0.11ms     0.34ms     3.11x
+  0.3            0.16ms     0.42ms     2.65x
+  0.5            0.16ms     0.36ms     2.27x
+  1.0            0.13ms     0.38ms     2.92x
+
+Results written to after_P5_meta_stream.json

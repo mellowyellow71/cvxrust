@@ -1,0 +1,90 @@
+============================================================
+CVXPY Canonicalization Benchmark Suite v1.0.0
+============================================================
+Machine: Darwin macOS-26.5-x86_64-i386-64bit-Mach-O / x86_64 / 10 cores
+CPU: Apple M5
+BLAS: scipy-openblas 0.3.31.dev
+Python 3.13.5 / NumPy 2.4.2 / SciPy 1.17.0 / CVXPY 1.8.0.dev0+199.141c454
+Rust backend: available
+Threads: RAYON=auto, OMP=1
+Git: 510846084
+Mode: quick | Layer: build_matrix | Backends: RUST, SCIPY | Seed: 42
+============================================================
+
+Running 14 problems across 2 backends...
+  Problem                                   RUST      SCIPY   SCIPY/RUST
+
+--- A: Arithmetic ---
+  dense_matmul (n=50)                     0.13ms!     0.21ms!    1.57x
+  sparse_matmul (n=100)                   0.12ms      0.18ms!    1.52x
+  dense_qp (n=50)                         0.12ms      0.49ms     4.22x
+
+--- B: Constraints ---
+  many_constraints (m=10)                 0.30ms      2.56ms     8.51x
+  many_constraints (m=50)                 0.56ms     11.78ms    20.98x
+  box_constraints (n=50)                  0.12ms!     0.38ms!    3.34x
+
+--- C: Structural ---
+  matrix_indexing (n=20)                  0.08ms      0.15ms!    1.78x
+  hstack (width=10)                       0.12ms!     2.36ms    19.64x
+  portfolio (n=50)                        0.14ms!     0.42ms     3.09x
+
+--- D: Specialized ---
+  lasso (n=50)                            0.38ms!     0.98ms     2.57x
+  svm (m=100)                             0.28ms!     0.92ms     3.31x
+  convolution (len=100)                   0.08ms!     0.14ms     1.68x
+
+--- E: Depth ---
+  nested_affine (depth=3)                 0.08ms!     0.15ms!    1.85x
+  nested_affine (depth=5)                 0.06ms      0.16ms     2.40x
+
+============================================================
+SUMMARY
+============================================================
+
+Layer: build_matrix
+  SCIPY/RUST: geomean 3.50x, arith mean 5.46x, range [1.52x, 20.98x], RUST wins 14/14
+  High variance (CV>10%): dense_matmul (n=50)/RUST (CV=30%), dense_matmul (n=50)/SCIPY (CV=13%), sparse_matmul (n=100)/SCIPY (CV=10%), box_constraints (n=50)/RUST (CV=13%), box_constraints (n=50)/SCIPY (CV=13%)
+    ... and 8 more
+
+============================================================
+SCALING: Constraint Count Scaling
+============================================================
+Value              RUST      SCIPY    Speedup
+---------------------------------------------
+  4              0.12ms     1.07ms     9.11x
+  10             0.26ms     2.48ms     9.68x
+  50             0.49ms    11.53ms    23.75x
+  100            0.79ms    23.14ms    29.41x
+  500            3.27ms   115.56ms    35.33x
+  1000           6.10ms   231.12ms    37.91x
+  2000          12.77ms   471.49ms    36.92x
+  5000          33.84ms  1183.56ms    34.97x
+
+============================================================
+SCALING: Variable Size Scaling
+============================================================
+Value              RUST      SCIPY    Speedup
+---------------------------------------------
+  10             0.08ms     0.15ms     1.94x
+  50             0.08ms     0.14ms     1.82x
+  100            0.07ms     0.14ms     1.98x
+  500            0.08ms     0.15ms     2.05x
+  1000           0.08ms     0.14ms     1.86x
+  2000           0.08ms     0.15ms     1.84x
+  5000           0.07ms     0.16ms     2.26x
+
+============================================================
+SCALING: Matrix Density Scaling
+============================================================
+Value              RUST      SCIPY    Speedup
+---------------------------------------------
+  0.001          0.10ms     0.32ms     3.17x
+  0.01           0.09ms     0.30ms     3.38x
+  0.05           0.08ms     0.30ms     3.71x
+  0.1            0.09ms     0.31ms     3.34x
+  0.3            0.09ms     0.31ms     3.37x
+  0.5            0.09ms     0.32ms     3.64x
+  1.0            0.09ms     0.32ms     3.52x
+
+Results written to baseline_quick_small.json

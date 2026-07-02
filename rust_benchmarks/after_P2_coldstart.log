@@ -1,0 +1,60 @@
+============================================================
+CVXPY Canonicalization Benchmark Suite v1.0.0
+============================================================
+Machine: Darwin macOS-26.5-x86_64-i386-64bit-Mach-O / x86_64 / 10 cores
+CPU: Apple M5
+BLAS: scipy-openblas 0.3.31.dev
+Python 3.13.5 / NumPy 2.4.2 / SciPy 1.17.0 / CVXPY 1.8.0.dev0+199.141c454
+Rust backend: available
+Threads: RAYON=auto, OMP=1
+Git: 87a6798eb
+Mode: default | Layer: build_matrix | Backends: RUST, SCIPY | Seed: 42
+============================================================
+
+Running 14 problems across 2 backends...
+  Problem                                   RUST      SCIPY   SCIPY/RUST
+
+--- A: Arithmetic ---
+  dense_matmul (n=50)                     0.10ms!     0.15ms!    1.51x
+  sparse_matmul (n=100)                   0.07ms      0.15ms     1.96x
+  dense_qp (n=50)                         0.09ms!     0.44ms     4.99x
+
+--- B: Constraints ---
+  many_constraints (m=10)                 0.23ms      2.63ms    11.38x
+  many_constraints (m=50)                 0.43ms     12.53ms    28.82x
+  box_constraints (n=50)                  0.09ms      0.35ms     3.98x
+
+--- C: Structural ---
+  matrix_indexing (n=20)                  0.07ms      0.13ms     2.03x
+  hstack (width=10)                       0.10ms      2.37ms    22.75x
+  portfolio (n=50)                        0.08ms      0.37ms     4.49x
+
+--- D: Specialized ---
+  lasso (n=50)                            0.20ms      0.94ms     4.67x
+  svm (m=100)                             0.23ms      0.91ms     4.02x
+  convolution (len=100)                   0.07ms      0.14ms     2.08x
+
+--- E: Depth ---
+  nested_affine (depth=3)                 0.07ms      0.13ms     1.92x
+  nested_affine (depth=5)                 0.06ms      0.13ms     2.14x
+
+============================================================
+SUMMARY
+============================================================
+
+Layer: build_matrix
+  SCIPY/RUST: geomean 4.26x, arith mean 6.91x, range [1.51x, 28.82x], RUST wins 14/14
+  High variance (CV>10%): dense_matmul (n=50)/RUST (CV=33%), dense_matmul (n=50)/SCIPY (CV=13%), dense_qp (n=50)/RUST (CV=10%)
+
+============================================================
+COLD START BENCHMARK (subprocess isolation)
+============================================================
+Samples per measurement: 10
+  Problem                              RUST      SCIPY    Speedup
+  ---------------------------------------------------------------
+  lasso (n=200)                     13.3ms    20.0ms     1.50x
+  dense_qp (n=200)                   8.5ms    11.4ms     1.35x
+  many_constraints (m=500)          54.5ms   178.0ms     3.27x
+  sparse_matmul (n=500)              6.5ms     8.1ms     1.24x
+
+Results written to after_P2_coldstart.json

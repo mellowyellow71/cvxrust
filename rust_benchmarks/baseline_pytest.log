@@ -1,0 +1,232 @@
+........................................................................ [ 54%]
+............FFF...................................F.........             [100%]
+=================================== FAILURES ===================================
+__________________ TestRustBackend.test_transpose_2d[shape0] ___________________
+
+self = <cvxpy.tests.test_rust_backend.TestRustBackend object at 0x1473b86e0>
+shape = (4, 5)
+
+    @pytest.mark.parametrize("shape", [(4, 5), (5, 4), (6, 6)])
+    def test_transpose_2d(self, shape):
+        """Test 2D transpose."""
+        m, n = shape
+        var_id = 1
+        size = m * n
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={var_id: 0},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=size,
+        )
+        var_op = linOpHelper(shape=shape, type="variable", data=var_id, args=[])
+        transpose_op = linOpHelper(
+            shape=(n, m), type="transpose", data=[None], args=[var_op]
+        )
+        scipy_result = scipy_backend.build_matrix([transpose_op])
+>       rust_result = rust_backend.build_matrix([transpose_op])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+cvxpy/tests/test_rust_backend.py:561: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cvxpy.lin_ops.canon_backend.RustCanonBackend object at 0x1473c9940>
+lin_ops = [LinOp(transpose, (5, 4))]
+
+    def build_matrix(self, lin_ops: list[LinOp]) -> sp.csc_array:
+        import cvxpy_rust
+        self.id_to_col[-1] = self.var_length
+    
+        # Use serialized path: pre-serialize LinOp trees to flat buffers,
+        # then build the coefficient matrix in Rust with exact NNZ
+        # pre-allocation (two-pass build).
+        nodes, float_data, int_data = serialize_linop_trees(lin_ops)
+>       data, (rows, cols), shape = cvxpy_rust.build_matrix_serialized(
+            nodes, float_data, int_data,
+            self.param_size_plus_one,
+            self.id_to_col,
+            self.param_to_size,
+            self.param_to_col,
+            self.var_length,
+        )
+E       pyo3_runtime.PanicException: Transpose operation must have axis data
+
+cvxpy/lin_ops/canon_backend.py:844: PanicException
+----------------------------- Captured stderr call -----------------------------
+
+thread '<unnamed>' (5363910) panicked at src/operations/structural.rs:111:14:
+Transpose operation must have axis data
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+__________________ TestRustBackend.test_transpose_2d[shape1] ___________________
+
+self = <cvxpy.tests.test_rust_backend.TestRustBackend object at 0x1473b87d0>
+shape = (5, 4)
+
+    @pytest.mark.parametrize("shape", [(4, 5), (5, 4), (6, 6)])
+    def test_transpose_2d(self, shape):
+        """Test 2D transpose."""
+        m, n = shape
+        var_id = 1
+        size = m * n
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={var_id: 0},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=size,
+        )
+        var_op = linOpHelper(shape=shape, type="variable", data=var_id, args=[])
+        transpose_op = linOpHelper(
+            shape=(n, m), type="transpose", data=[None], args=[var_op]
+        )
+        scipy_result = scipy_backend.build_matrix([transpose_op])
+>       rust_result = rust_backend.build_matrix([transpose_op])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+cvxpy/tests/test_rust_backend.py:561: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cvxpy.lin_ops.canon_backend.RustCanonBackend object at 0x147483540>
+lin_ops = [LinOp(transpose, (4, 5))]
+
+    def build_matrix(self, lin_ops: list[LinOp]) -> sp.csc_array:
+        import cvxpy_rust
+        self.id_to_col[-1] = self.var_length
+    
+        # Use serialized path: pre-serialize LinOp trees to flat buffers,
+        # then build the coefficient matrix in Rust with exact NNZ
+        # pre-allocation (two-pass build).
+        nodes, float_data, int_data = serialize_linop_trees(lin_ops)
+>       data, (rows, cols), shape = cvxpy_rust.build_matrix_serialized(
+            nodes, float_data, int_data,
+            self.param_size_plus_one,
+            self.id_to_col,
+            self.param_to_size,
+            self.param_to_col,
+            self.var_length,
+        )
+E       pyo3_runtime.PanicException: Transpose operation must have axis data
+
+cvxpy/lin_ops/canon_backend.py:844: PanicException
+----------------------------- Captured stderr call -----------------------------
+
+thread '<unnamed>' (5363910) panicked at src/operations/structural.rs:111:14:
+Transpose operation must have axis data
+__________________ TestRustBackend.test_transpose_2d[shape2] ___________________
+
+self = <cvxpy.tests.test_rust_backend.TestRustBackend object at 0x1473b8870>
+shape = (6, 6)
+
+    @pytest.mark.parametrize("shape", [(4, 5), (5, 4), (6, 6)])
+    def test_transpose_2d(self, shape):
+        """Test 2D transpose."""
+        m, n = shape
+        var_id = 1
+        size = m * n
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={var_id: 0},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=size,
+        )
+        var_op = linOpHelper(shape=shape, type="variable", data=var_id, args=[])
+        transpose_op = linOpHelper(
+            shape=(n, m), type="transpose", data=[None], args=[var_op]
+        )
+        scipy_result = scipy_backend.build_matrix([transpose_op])
+>       rust_result = rust_backend.build_matrix([transpose_op])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+cvxpy/tests/test_rust_backend.py:561: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cvxpy.lin_ops.canon_backend.RustCanonBackend object at 0x14836e350>
+lin_ops = [LinOp(transpose, (6, 6))]
+
+    def build_matrix(self, lin_ops: list[LinOp]) -> sp.csc_array:
+        import cvxpy_rust
+        self.id_to_col[-1] = self.var_length
+    
+        # Use serialized path: pre-serialize LinOp trees to flat buffers,
+        # then build the coefficient matrix in Rust with exact NNZ
+        # pre-allocation (two-pass build).
+        nodes, float_data, int_data = serialize_linop_trees(lin_ops)
+>       data, (rows, cols), shape = cvxpy_rust.build_matrix_serialized(
+            nodes, float_data, int_data,
+            self.param_size_plus_one,
+            self.id_to_col,
+            self.param_to_size,
+            self.param_to_col,
+            self.var_length,
+        )
+E       pyo3_runtime.PanicException: Transpose operation must have axis data
+
+cvxpy/lin_ops/canon_backend.py:844: PanicException
+----------------------------- Captured stderr call -----------------------------
+
+thread '<unnamed>' (5363910) panicked at src/operations/structural.rs:111:14:
+Transpose operation must have axis data
+_________________ TestRustBackend.test_mul_with_transpose_data _________________
+
+self = <cvxpy.tests.test_rust_backend.TestRustBackend object at 0x1473b95e0>
+
+    def test_mul_with_transpose_data(self):
+        """Test multiplication where data is transposed."""
+        np.random.seed(42)
+        n = 4
+        var_id = 1
+    
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={var_id: 0},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=n,
+        )
+    
+        var_op = linOpHelper(shape=(n,), type="variable", data=var_id, args=[])
+        const_data = np.random.randn(n, 3)
+        const_op = linOpHelper(shape=(n, 3), type="dense_const", data=const_data, args=[])
+        transpose_op = linOpHelper(shape=(3, n), type="transpose", data=[None], args=[const_op])
+        mul_op = linOpHelper(shape=(3,), type="mul", data=transpose_op, args=[var_op])
+    
+        scipy_result = scipy_backend.build_matrix([mul_op])
+>       rust_result = rust_backend.build_matrix([mul_op])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+cvxpy/tests/test_rust_backend.py:848: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cvxpy.lin_ops.canon_backend.RustCanonBackend object at 0x14836ec80>
+lin_ops = [LinOp(mul, (3,))]
+
+    def build_matrix(self, lin_ops: list[LinOp]) -> sp.csc_array:
+        import cvxpy_rust
+        self.id_to_col[-1] = self.var_length
+    
+        # Use serialized path: pre-serialize LinOp trees to flat buffers,
+        # then build the coefficient matrix in Rust with exact NNZ
+        # pre-allocation (two-pass build).
+        nodes, float_data, int_data = serialize_linop_trees(lin_ops)
+>       data, (rows, cols), shape = cvxpy_rust.build_matrix_serialized(
+            nodes, float_data, int_data,
+            self.param_size_plus_one,
+            self.id_to_col,
+            self.param_to_size,
+            self.param_to_col,
+            self.var_length,
+        )
+E       pyo3_runtime.PanicException: Transpose operation must have axis data
+
+cvxpy/lin_ops/canon_backend.py:844: PanicException
+----------------------------- Captured stderr call -----------------------------
+
+thread '<unnamed>' (5363910) panicked at src/operations/structural.rs:111:14:
+Transpose operation must have axis data
+=========================== short test summary info ============================
+FAILED cvxpy/tests/test_rust_backend.py::TestRustBackend::test_transpose_2d[shape0]
+FAILED cvxpy/tests/test_rust_backend.py::TestRustBackend::test_transpose_2d[shape1]
+FAILED cvxpy/tests/test_rust_backend.py::TestRustBackend::test_transpose_2d[shape2]
+FAILED cvxpy/tests/test_rust_backend.py::TestRustBackend::test_mul_with_transpose_data
+4 failed, 128 passed in 1.36s

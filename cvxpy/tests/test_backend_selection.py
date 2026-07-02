@@ -151,20 +151,30 @@ class TestBackendSelectionFallback:
         assert len(w) == 1
         assert "SCIPY" in str(w[0].message)
 
-    def test_ndim_gt_2_fallback_to_scipy(self):
-        """Problems with >2D expressions should fallback to SCIPY."""
+    def test_ndim_gt_2_default_backend(self):
+        """>2D problems route to RUST silently when available, else warn + SCIPY."""
         x = cp.Variable((2, 3, 4))  # 3D variable
         prob = cp.Problem(cp.Minimize(cp.sum(x)), [x >= 0])
 
         assert prob._max_ndim() > 2
 
+        try:
+            import cvxpy_rust  # noqa: F401
+            rust_available = True
+        except ImportError:
+            rust_available = False
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             backend = get_canon_backend(prob, None)
 
-        assert backend == s.SCIPY_CANON_BACKEND
-        assert len(w) == 1
-        assert "SCIPY" in str(w[0].message)
+        if rust_available:
+            assert backend == s.RUST_CANON_BACKEND
+            assert len(w) == 0
+        else:
+            assert backend == s.SCIPY_CANON_BACKEND
+            assert len(w) == 1
+            assert "SCIPY" in str(w[0].message)
 
     def test_ndim_gt_2_user_override_respected(self):
         """User-specified COO for >2D problem should be respected."""
