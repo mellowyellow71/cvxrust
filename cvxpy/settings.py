@@ -208,7 +208,18 @@ CPP_CANON_BACKEND = "CPP"
 COO_CANON_BACKEND = "COO"  # 3D COO sparse tensor backend: O(nnz) operations for large parameters
 
 # Default canonicalization backend, pyodide uses SciPy
-DEFAULT_CANON_BACKEND = CPP_CANON_BACKEND if sys.platform != "emscripten" else SCIPY_CANON_BACKEND
+# Priority: RUST (if the cvxpy_rust extension is importable) > CPP > SCIPY (pyodide)
+def _get_default_canon_backend() -> str:
+    if sys.platform == "emscripten":
+        return SCIPY_CANON_BACKEND
+    try:
+        import cvxpy_rust  # noqa: F401
+        return RUST_CANON_BACKEND
+    except ImportError:
+        return CPP_CANON_BACKEND
+
+
+DEFAULT_CANON_BACKEND = _get_default_canon_backend()
 
 # DPP parameter threshold for auto-selecting COO backend
 # When problem is DPP and total parameter size >= this threshold, use COO backend

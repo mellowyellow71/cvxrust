@@ -1,0 +1,28 @@
+[package]
+name = "cvxpy_rust"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Rust canonicalization backend for CVXPY"
+repository = "https://github.com/cvxpy/cvxpy"
+
+[lib]
+name = "cvxpy_rust"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.27.1" }
+numpy = "0.27.0"
+rayon = "1.10"
+
+# extension-module must be off for `cargo test` (test binaries need to link
+# libpython); maturin and setuptools-rust build with default features, which
+# keep it on. Run tests with: cargo test --release --no-default-features
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
