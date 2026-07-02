@@ -42,7 +42,14 @@ from scipy.stats import t as t_dist
 
 import cvxpy as cp
 from cvxpy.cvxcore.python import canonInterface
-from cvxpy.lin_ops.canon_backend import CanonBackend
+
+try:
+    # cvxpy >= 1.9: backends registry (includes COO)
+    from cvxpy.lin_ops.backends import get_backend as _get_canon_backend
+except ImportError:
+    # older cvxpy: monolithic canon_backend module
+    from cvxpy.lin_ops.canon_backend import CanonBackend as _CanonBackend
+    _get_canon_backend = _CanonBackend.get_backend
 
 # ---------------------------------------------------------------------------
 # 1. Environment fingerprinting
@@ -301,7 +308,7 @@ def time_build_matrix(captured_call: dict, backend_name: str) -> float:
             c["linOps"],
         ))
     # Fresh copy of id_to_col because build_matrix mutates it
-    backend = CanonBackend.get_backend(
+    backend = _get_canon_backend(
         backend_name,
         dict(c["id_to_col"]),
         dict(c["param_to_size"]),
@@ -1104,6 +1111,218 @@ print((time.perf_counter() - start) * 1000)
 # 10. CLI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Exhaustive per-atom sweep (--atoms): every cvxpy atom through
+# get_problem_data on every backend. Regression-hunting tool; too granular
+# for the ASV dashboard (which uses family-grouped cases instead).
+# ---------------------------------------------------------------------------
+
+def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
+    """One small problem per atom. Version-dependent atoms are skipped when absent."""
+    rng = np.random.default_rng(42)
+    n = 24
+    a_mat = rng.standard_normal((32, n))
+    b_mat = rng.standard_normal((8, 5))
+    w_vec = np.linspace(0.5, 1.5, n)
+    kernel = rng.standard_normal(9)
+    c56 = rng.standard_normal((5, 6))
+    p_half = rng.standard_normal((n, n)) / n
+    p_psd = p_half.T @ p_half + 0.1 * np.eye(n)
+
+    def prob(expr_fn, sense="min", constraints_fn=None):
+        def factory():
+            expr = expr_fn()
+            obj_expr = expr if expr.shape == () else cp.sum(expr)
+            objective = cp.Minimize(obj_expr) if sense == "min" else cp.Maximize(obj_expr)
+            return cp.Problem(objective, constraints_fn() if constraints_fn else [])
+        return factory
+
+    def X():
+        return cp.Variable((6, 8))
+
+    def X66():
+        return cp.Variable((6, 6))
+
+    def S66():
+        return cp.Variable((6, 6), symmetric=True)
+
+    def x():
+        return cp.Variable(n)
+
+    entries: list[tuple[str, Callable[[], cp.Problem]]] = []
+
+    def add(name, expr_fn, sense="min", requires=None):
+        if requires is not None and not hasattr(cp, requires):
+            return
+        entries.append((name, prob(expr_fn, sense)))
+
+    # --- affine / structural ---
+    add("neg", lambda: -X())
+    add("sum", lambda: cp.sum(X()))
+    add("sum_axis", lambda: cp.sum(X(), axis=1))
+    add("cumsum", lambda: cp.cumsum(x()))
+    add("diff", lambda: cp.diff(x()))
+    add("multiply", lambda: cp.multiply(w_vec, x()))
+    add("matmul_const_left", lambda: a_mat @ x())
+    add("matmul_const_right", lambda: X() @ b_mat)
+    add("divide", lambda: x() / 2.5)
+    add("index_slice", lambda: x()[::2])
+    add("index_matrix", lambda: X()[1:5, ::2])
+    add("transpose", lambda: X().T)
+    add("reshape", lambda: _bench_reshape(X(), (48,)))
+    add("vec", lambda: _bench_vec(X()))
+    add("promote", lambda: cp.Variable() + np.ones((6, 8)))
+    add("broadcast_to", lambda: cp.broadcast_to(cp.Variable((1, 8)), (6, 8)),
+        requires="broadcast_to")
+    add("hstack", lambda: cp.hstack([x(), x()]))
+    add("vstack", lambda: cp.vstack([X(), X()]))
+    add("concatenate", lambda: cp.concatenate([X(), X()], axis=0), requires="concatenate")
+    add("bmat", lambda: cp.bmat([[X66(), X66()], [X66(), X66()]]))
+    add("diag_vec", lambda: cp.diag(x()))
+    add("diag_mat", lambda: cp.diag(X66()))
+    add("trace", lambda: cp.trace(X66()))
+    add("upper_tri", lambda: cp.upper_tri(X66()))
+    add("kron_const_expr", lambda: cp.kron(np.eye(3), X66()))
+    add("kron_expr_const", lambda: cp.kron(X66(), np.eye(3)))
+    add("conv", lambda: (cp.convolve if hasattr(cp, "convolve") else cp.conv)(kernel, x()))
+    add("einsum", lambda: cp.einsum("ij,jk->ik", c56, cp.Variable((6, 8))), requires="einsum")
+    add("partial_trace", lambda: cp.partial_trace(cp.Variable((16, 16)), dims=(4, 4), axis=0),
+        requires="partial_trace")
+    add("partial_transpose",
+        lambda: cp.partial_transpose(cp.Variable((16, 16)), dims=(4, 4), axis=0),
+        requires="partial_transpose")
+    add("nd_sum_axis", lambda: cp.sum(cp.Variable((2, 3, 4)), axis=(0, 2)))
+    add("nd_transpose", lambda: cp.transpose(cp.Variable((2, 3, 4)), axes=(2, 0, 1)))
+
+    # --- elementwise ---
+    add("abs", lambda: cp.abs(x()))
+    add("pos", lambda: cp.pos(x()))
+    add("neg_part", lambda: cp.neg(x()))
+    add("square", lambda: cp.square(x()))
+    add("sqrt", lambda: cp.sqrt(x()), sense="max")
+    add("power_1_5", lambda: cp.power(x(), 1.5))
+    add("exp", lambda: cp.exp(x()))
+    add("log", lambda: cp.log(x()), sense="max")
+    add("log1p", lambda: cp.log1p(x()), sense="max")
+    add("entr", lambda: cp.entr(x()), sense="max")
+    add("huber", lambda: cp.huber(x(), M=1.0))
+    add("logistic", lambda: cp.logistic(x()))
+    add("inv_pos", lambda: cp.inv_pos(x()))
+    add("maximum", lambda: cp.maximum(x(), 0.5))
+    add("minimum", lambda: cp.minimum(x(), 0.5), sense="max")
+    add("kl_div", lambda: cp.kl_div(x(), cp.Variable(n)))
+    add("rel_entr", lambda: cp.rel_entr(x(), cp.Variable(n)), requires="rel_entr")
+    add("xexp", lambda: cp.xexp(cp.Variable(n, nonneg=True)), requires="xexp")
+
+    # --- reductions / matrix nonlinear ---
+    add("norm1", lambda: cp.norm1(x()))
+    add("norm2", lambda: cp.norm(x(), 2))
+    add("norm_inf", lambda: cp.norm(x(), "inf"))
+    add("pnorm_1_5", lambda: cp.pnorm(x(), 1.5))
+    add("norm_nuc", lambda: cp.norm(X(), "nuc"))
+    add("sigma_max", lambda: cp.sigma_max(X()))
+    add("lambda_max", lambda: cp.lambda_max(S66()))
+    add("lambda_min", lambda: cp.lambda_min(S66()), sense="max")
+    add("log_det", lambda: cp.log_det(S66()), sense="max")
+    add("log_sum_exp", lambda: cp.log_sum_exp(x()))
+    add("quad_over_lin", lambda: cp.quad_over_lin(x(), cp.Variable()))
+    add("quad_form", lambda: cp.quad_form(x(), p_psd))
+    add("matrix_frac", lambda: cp.matrix_frac(cp.Variable(6), S66()))
+    add("sum_largest", lambda: cp.sum_largest(x(), 5))
+    add("sum_smallest", lambda: cp.sum_smallest(x(), 5), sense="max")
+    add("max", lambda: cp.max(x()))
+    add("min", lambda: cp.min(x()), sense="max")
+    add("geo_mean", lambda: cp.geo_mean(cp.Variable(8)), sense="max")
+    add("harmonic_mean", lambda: cp.harmonic_mean(cp.Variable(8)), sense="max")
+    add("mixed_norm", lambda: cp.mixed_norm(X(), 2, 1))
+    add("tv", lambda: cp.tv(X()))
+    add("dotsort", lambda: cp.dotsort(x(), np.sort(rng.standard_normal(n))),
+        requires="dotsort")
+    add("ptp", lambda: cp.ptp(x()), requires="ptp")
+    add("std", lambda: cp.std(x()), requires="std")
+    add("cvar", lambda: cp.cvar(x(), 0.8), requires="cvar")
+
+    return entries
+
+
+def _bench_reshape(expr, shape):
+    try:
+        return cp.reshape(expr, shape, order="F")
+    except TypeError:
+        return cp.reshape(expr, shape)
+
+
+def _bench_vec(expr):
+    try:
+        return cp.vec(expr, order="F")
+    except TypeError:
+        return cp.vec(expr)
+
+
+def run_atom_sweep(backends: list[str], mode: str = "default", json_path: str | None = None):
+    """Time get_problem_data for every atom problem on every backend."""
+    reps = {"quick": 2, "default": 3, "thorough": 7}[mode]
+    entries = make_atom_problems()
+    print(f"Atom sweep: {len(entries)} atoms x {len(backends)} backends "
+          f"({reps} reps + 1 warmup each)\n")
+
+    rows = []
+    for name, factory in entries:
+        row = {"atom": name}
+        for backend in backends:
+            try:
+                base = factory()
+                samples = []
+                for i in range(reps + 1):
+                    fresh = cp.Problem(base.objective, base.constraints)
+                    t0 = time.perf_counter()
+                    fresh.get_problem_data(cp.CLARABEL, canon_backend=backend)
+                    if i > 0:  # first call is warmup
+                        samples.append((time.perf_counter() - t0) * 1000)
+                row[backend] = float(np.median(samples))
+            except NotImplementedError:
+                row[backend] = None
+            except Exception as e:
+                row[backend] = f"error: {type(e).__name__}"
+        rows.append(row)
+
+    # Table: median ms per backend, plus speedup vs SCIPY where available
+    ref = "SCIPY" if "SCIPY" in backends else backends[0]
+    others = [b for b in backends if b != ref]
+    header = f"{'atom':<20}" + "".join(f"{b:>12}" for b in backends)
+    header += "".join(f"{f'{ref}/{b}':>12}" for b in others)
+    print(header)
+    print("-" * len(header))
+    ratios: dict[str, list[float]] = {b: [] for b in others}
+    for row in rows:
+        line = f"{row['atom']:<20}"
+        for b in backends:
+            v = row[b]
+            line += f"{v:>11.2f} " if isinstance(v, float) else f"{str(v or 'n/a')[:11]:>12}"
+        for b in others:
+            v, r = row[b], row[ref]
+            if isinstance(v, float) and isinstance(r, float) and v > 0:
+                ratio = r / v
+                ratios[b].append(ratio)
+                line += f"{ratio:>11.2f}x"
+            else:
+                line += f"{'-':>12}"
+        print(line)
+    print("-" * len(header))
+    for b in others:
+        if ratios[b]:
+            geomean = float(np.exp(np.mean(np.log(ratios[b]))))
+            worst = min(ratios[b])
+            print(f"{ref}/{b}: geomean {geomean:.2f}x | worst {worst:.2f}x "
+                  f"| {sum(r > 1 for r in ratios[b])}/{len(ratios[b])} wins")
+
+    if json_path:
+        with open(json_path, "w") as f:
+            json.dump({"kind": "atom_sweep", "backends": backends, "reps": reps,
+                       "results": rows}, f, indent=2)
+        print(f"\nJSON written to {json_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="CVXPY Canonicalization Backend Benchmark Suite",
@@ -1153,6 +1372,8 @@ def _add_run_args(parser):
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     parser.add_argument("--cold-start", action="store_true",
                         help="Also run cold-start (subprocess) benchmarks")
+    parser.add_argument("--atoms", action="store_true",
+                        help="Run the exhaustive per-atom sweep instead of the problem suite")
     parser.set_defaults(mode="default")
 
 
@@ -1184,6 +1405,11 @@ def _run_main(args):
                 available.append(b)
             except ImportError:
                 print(f"WARNING: {b} backend not available, skipping")
+        elif b == "COO":
+            if getattr(cp, "COO_CANON_BACKEND", None) == "COO":
+                available.append(b)
+            else:
+                print(f"WARNING: {b} backend not available, skipping")
         else:
             available.append(b)
 
@@ -1205,6 +1431,10 @@ def _run_main(args):
     if args.single_thread:
         print("Threading: ALL DISABLED (single-thread mode)")
     print(f"{'=' * 60}")
+
+    if args.atoms:
+        run_atom_sweep(backends, mode=args.mode, json_path=args.json)
+        return
 
     # Generate problems
     problems = make_problems(args.sizes)
