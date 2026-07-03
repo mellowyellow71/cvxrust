@@ -22,6 +22,11 @@ import scipy.sparse as sp
 
 from cvxpy.lin_ops import LinOp
 from cvxpy.lin_ops.backends.base import CanonBackend
+from cvxpy.settings import SPARSE_DENSITY_THRESHOLD
+
+# Dense constants at least this large are scanned for sparsity; mostly-zero
+# ones are serialized as sparse instead (below the scan is not worth it).
+_SPARSIFY_MIN_SIZE = 4096
 
 # Op type string -> int mapping for serialization (must match OpType::from_int in Rust)
 _OP_TYPE_MAP = {
@@ -100,6 +105,26 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
     linop_data_ops = _LINOP_DATA_OPS
     f64_bits = _F64_BITS
 
+    def _emit_sparse(op_code, shape, nargs, matrix):
+        nonlocal float_offset, int_offset
+        csc = sp.csc_array(matrix)
+        vals = np.asarray(csc.data, dtype=np.float64)
+        indices = np.asarray(csc.indices, dtype=np.int64)
+        indptr = np.asarray(csc.indptr, dtype=np.int64)
+        float_chunks.append(vals)
+        int_chunks.append(indices)
+        int_chunks.append(indptr)
+        extend((
+            op_code, len(shape), *shape, nargs,
+            4,
+            float_offset, len(vals),
+            int_offset, len(indices),
+            int_offset + len(indices), len(indptr),
+            csc.shape[0], csc.shape[1],
+        ))
+        float_offset += len(vals)
+        int_offset += len(indices) + len(indptr)
+
     def _serialize_node(lin_op):
         nonlocal float_offset, int_offset
 
@@ -121,12 +146,22 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
 
         elif t == "dense_const":
             arr = np.asarray(data, dtype=np.float64)
-            flat = arr.ravel(order='F')
-            float_chunks.append(flat)
-            n = len(flat)
-            extend((op_map[t], len(shape), *shape, nargs,
-                    3, float_offset, n, arr.ndim, *arr.shape))
-            float_offset += n
+            # Mostly-zero dense constants go down the sparse path instead
+            # (mirrors cvxpy's SPARSE_DENSITY_THRESHOLD heuristic, #3366;
+            # constants only — parameters never reach this branch).
+            if (
+                arr.ndim == 2
+                and arr.size >= _SPARSIFY_MIN_SIZE
+                and np.count_nonzero(arr) < SPARSE_DENSITY_THRESHOLD * arr.size
+            ):
+                _emit_sparse(op_map["sparse_const"], shape, nargs, arr)
+            else:
+                flat = arr.ravel(order='F')
+                float_chunks.append(flat)
+                n = len(flat)
+                extend((op_map[t], len(shape), *shape, nargs,
+                        3, float_offset, n, arr.ndim, *arr.shape))
+                float_offset += n
 
         elif t in linop_data_ops:
             # Data is a LinOp — serialized inline after this node, before args
@@ -134,23 +169,7 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
             has_data_linop = True
 
         elif t == "sparse_const":
-            csc = sp.csc_array(data)
-            vals = np.asarray(csc.data, dtype=np.float64)
-            indices = np.asarray(csc.indices, dtype=np.int64)
-            indptr = np.asarray(csc.indptr, dtype=np.int64)
-            float_chunks.append(vals)
-            int_chunks.append(indices)
-            int_chunks.append(indptr)
-            extend((
-                op_map[t], len(shape), *shape, nargs,
-                4,
-                float_offset, len(vals),
-                int_offset, len(indices),
-                int_offset + len(indices), len(indptr),
-                csc.shape[0], csc.shape[1],
-            ))
-            float_offset += len(vals)
-            int_offset += len(indices) + len(indptr)
+            _emit_sparse(op_map[t], shape, nargs, data)
 
         elif t == "index":
             extend((op_map[t], len(shape), *shape, nargs, 5, len(data)))

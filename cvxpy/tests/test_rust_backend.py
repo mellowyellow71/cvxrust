@@ -394,6 +394,42 @@ class TestRustBackend:
         rust_result = rust_backend.build_matrix([mul_op])
         self.compare_matrices(scipy_result, rust_result)
 
+    def test_dense_constant_sparsification(self):
+        """Mostly-zero dense constants (>=4096 elems, <5% nonzero) take the sparse path."""
+        from cvxpy.lin_ops.backends.rust_backend import _OP_TYPE_MAP, serialize_linop_trees
+
+        rng = np.random.default_rng(0)
+        arr = np.zeros((128, 64))
+        idx = rng.choice(arr.size, size=200, replace=False)  # density ~2.4%
+        arr.ravel()[idx] = rng.standard_normal(len(idx))
+
+        var_op = linOpHelper((64,), type="variable", data=1)
+        const_op = linOpHelper((128, 64), type="dense_const", data=arr)
+        mul_op = linOpHelper((128,), type="mul", data=const_op, args=[var_op])
+
+        # the inline data LinOp (header starts after the 5-slot mul header)
+        nodes, _, _ = serialize_linop_trees([mul_op])
+        assert nodes[5] == _OP_TYPE_MAP["sparse_const"]
+
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={1: 0},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=64,
+        )
+        self.compare_matrices(
+            scipy_backend.build_matrix([mul_op]), rust_backend.build_matrix([mul_op])
+        )
+
+        # a dense constant above the threshold stays dense
+        dense = rng.standard_normal((128, 64))
+        dense_op = linOpHelper((128, 64), type="dense_const", data=dense)
+        nodes, _, _ = serialize_linop_trees(
+            [linOpHelper((128,), type="mul", data=dense_op, args=[var_op])]
+        )
+        assert nodes[5] == _OP_TYPE_MAP["dense_const"]
+
     @pytest.mark.parametrize("name,var_shape,const_shape,output_shape", [
         ("1d_dot", (4,), (4,), (1,)),
         ("2d", (3, 4), (4, 2), (3, 2)),
