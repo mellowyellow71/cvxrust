@@ -1,168 +1,184 @@
-# cvxpy/benchmarks results — Rust canon backend vs SciPy & C++
+# cvxpy/benchmarks results — Rust canon backend vs SciPy, C++ & COO
 
-Run of the **official [cvxpy/benchmarks](https://github.com/cvxpy/benchmarks)** suite against the
-Rust canonicalization backend on this branch (`alan/arena-allocator`), compared head-to-head with
-the `SCIPY` and `CPP` (cvxcore) backends.
+Run of the **official [cvxpy/benchmarks](https://github.com/cvxpy/benchmarks)** suite plus the
+in-repo synthetic suite, ASV backend suite, and the exhaustive per-atom sweep, comparing the Rust
+canonicalization backend head-to-head with the `SCIPY`, `CPP` (cvxcore), and `COO` backends.
 
-- **Date:** 2026-06-17
-- **Machine:** macOS (darwin 25.5.0), conda env `cvxpy-py313`, Python 3.13
-- **What is measured:** wall-clock of `Problem.get_problem_data(...)` only — i.e. *canonicalization /
-matrix stuffing*, not the numerical solve. This is exactly what each benchmark's
-`time_compile_problem()` exercises.
+- **Date:** 2026-07-03
+- **Branch:** `alan/rust-backend-1.9` — the Rust backend ported onto upstream cvxpy master
+  (`40947203c`, ~1.9.2-dev) plus the dense-constant sparsification fix (`7bf07625c`)
+- **Machine:** macOS (darwin 25.5.0), 18 GB, `.venv` Python 3.13, release build
+- **What is measured:** wall-clock of `Problem.get_problem_data(...)` (canonicalization / matrix
+  stuffing), or the backend-isolated `build_matrix` call where noted — never the numerical solve
+- **Previous report:** 2026-06-17, `alan/arena-allocator` (pre-rebase, RUST/SCIPY/CPP only) —
+  preserved as `results_prerebase.jsonl`; the Δ columns below compare against it
 
----
+## What changed since the 2026-06-17 report
 
-## Methodology (and why it deviates from `asv run`)
+1. **Rebase onto upstream master (1.9.x).** The much-cited "murray optimization" on master
+   (PR #3366) turned out to live in the NLP diff_engine, *not* the canonicalization path — it does
+   not speed up SCIPY/CPP canon. What the rebase actually brought: the **COO backend** (#3031,
+   now in the comparison), the **einsum atom** (#2970 — works on the Rust backend with zero Rust
+   changes), the ND-parametric-matmul fix (#3401 — Rust path verified unaffected), and the
+   `backends/` refactor.
+2. **Dense-constant sparsification in the Rust serializer** (mirrors #3366's heuristic: 2D dense
+   constants ≥4096 elements below `SPARSE_DENSITY_THRESHOLD`=5% nonzeros are serialized sparse).
+   This **eliminated the Murray loss**: 2199 ms → 1024 ms (Δ 2.5×), now at parity with every
+   backend. UnconstrainedQP also dropped 4938 → 3606 ms as a side effect.
+3. **Correctness gate:** `verify_backends.py` asserts all four backends produce numerically
+   identical stuffed tensors (max abs diff 0.0, parameter slices included) on every ASV case,
+   including einsum, ND ops, both murray density regimes, and 256-deep/wide trees.
 
-The benchmarks repo is built for [Airspeed Velocity](https://asv.readthedocs.io/) (`asv run`). I did
-**not** drive it through asv, for one decisive reason and a few practical ones:
+## Methodology
 
-1. **asv builds cvxpy from a git commit into an isolated virtualenv.** It would compile a *clean*
-  cvxpy and never pick up the locally-built Rust extension (`cvxpy_rust`, built via maturin into the
-   working env). The whole point here is to measure *our* backend, so asv's hermetic build defeats the
-   experiment. Instead I imported each benchmark module directly and called its class.
-2. `**get_problem_data` caches the solving chain on first call.** Calling it twice on the same
-  `Problem` with different `canon_backend` values returns **stale** data from the first backend
-   (verified empirically). So every single measurement builds a **fresh** problem (`Cls(); inst.setup()`)
-   and times exactly one `get_problem_data`. The backend is injected by transiently wrapping
-   `Problem.get_problem_data` to set `canon_backend=<backend>`, preserving each benchmark's native
-   solver and other args.
-3. **Crash isolation.** Each benchmark runs in its own subprocess (`run_one.py`), so an OOM-kill or
-  segfault in one cannot poison the others' timings.
-4. **No `timeout(1)` on macOS.** A per-measurement `SIGALRM` watchdog (150 s cap) stands in for
-  `timeout`/`gtimeout`.
+Same harness as before (`sweep.sh` → `run_one.py`, one subprocess per class for crash isolation,
+fresh `Problem` per rep to defeat the solving-chain cache, backend injected via a transient
+`get_problem_data` wrapper), with: **1 warm-up + 3 timed reps** (median), a 240 s SIGALRM watchdog,
+and COO added. Sub-10% gaps are noise.
 
-Per benchmark: **1 warm-up + 2 timed reps** per backend, median reported. (Light reps — the suite is
-slow and the signal is large; treat sub-10% gaps as noise.)
-
-Harness: `run_one.py` (single class, all backends) driven by `sweep.sh` over all 25 classes; raw
-output in `results.jsonl`.
-
----
-
-## Results
-
-All times are **median milliseconds** for canonicalization. Ratios are **>1 ⇒ Rust faster**:
-`R/S = SciPy / Rust`, `R/C = CPP / Rust`.
-
-
-| Benchmark                  | Rust (ms) | SciPy (ms) | CPP (ms) | R/S       | R/C   |
-| -------------------------- | --------- | ---------- | -------- | --------- | ----- |
-| LeastSquares               | 910       | 2534       | 1545     | **2.79×** | 1.70× |
-| ConvexPlasticity           | 18528     | 56943      | 16413    | **3.07×** | 0.89× |
-| Cajas                      | 432       | 886        | 2078     | **2.05×** | 4.81× |
-| FactorCovarianceModel      | 651       | 1224       | 1261     | **1.88×** | 1.94× |
-| OptimalAdvertising         | 304       | 548        | 1910     | **1.80×** | 6.29× |
-| SimpleQPBenchmark          | 1490      | 2695       | 2776     | **1.81×** | 1.86× |
-| SimpleLPBenchmark          | 7026      | 12059      | 14137    | **1.72×** | 2.01× |
-| SlowPruningBenchmark       | 1501      | 2498       | 1815     | **1.66×** | 1.21× |
-| HuberRegression            | 1743      | 2858       | 3287     | **1.64×** | 1.89× |
-| SemidefiniteProgramming    | 442       | 715        | 1087     | **1.62×** | 2.46× |
-| Yitzhaki                   | 847       | 1337       | 1253     | **1.58×** | 1.48× |
-| SVMWithL1Regularization    | 2036      | 2991       | 3419     | **1.47×** | 1.68× |
-| SimpleScalarParametrizedLP | 1153      | 1502       | 1565     | **1.30×** | 1.36× |
-| CVaRBenchmark              | 9211      | 10291      | 14665    | **1.12×** | 1.59× |
-| QuantumHilbertMatrix       | 1114      | 1199       | 1238     | **1.08×** | 1.11× |
-| TvInpainting               | 997       | 803        | 914      | 0.81×     | 0.92× |
-| UnconstrainedQP            | 7808      | 3008       | 2406     | 0.39×     | 0.31× |
-| Murray (gini)              | 7739      | 1723       | 2347     | 0.22×     | 0.30× |
-| SDPSegfault1132            | 55255     | 3230       | 27075    | 0.06×     | 0.49× |
-
-
-### Aggregates (19 measurable benchmarks)
-
-
-| Comparison        | Geomean speedup | Rust wins |
-| ----------------- | --------------- | --------- |
-| **Rust vs SciPy** | **1.14×**       | 15 / 19   |
-| **Rust vs CPP**   | **1.38×**       | 14 / 19   |
-
-
-The Rust backend is the fastest of the three on the **majority** of real problems, and the wins are
-often large (1.5–3×). The geomean is dragged down almost entirely by a small cluster of pathological
-regressions described next.
+Two cells could not be measured, both on `ParametrizedQPBenchmark` (a fully parametrized QP —
+the COO backend's native workload): **SCIPY timed out (>240 s)** and **CPP was killed at >9 GB
+RSS** by a memory watchdog (unguarded, this cell froze/crashed the host twice). RUST completed it
+in 1.6 s and COO in 1.2 s.
 
 ---
 
-## The regressions: two distinct mechanisms (not one cluster)
+## 1. External suite (official cvxpy/benchmarks, 21 classes)
 
-Four benchmarks where Rust *loses*. On reading the sources they split into **two unrelated causes** —
-an earlier draft lumped them as one "kron/diag" cluster, which was wrong (Murray contains neither
-`kron` nor `cp.diag`):
+All times are **median milliseconds** for canonicalization. Ratios are **>1 ⇒ Rust faster**.
+Δ vs pre-rebase compares today's ratio with the 2026-06-17 ratio for the same pair
+(>1 ⇒ Rust's relative position improved).
 
+### RUST vs SCIPY
 
-| Benchmark           | R/S                     | Mechanism                                                        |
-| ------------------- | ----------------------- | --------------------------------------------------------------- |
-| **SDPSegfault1132** | **0.06×** (≈17× slower) | kron + `diag` of a *dense affine* Gram matrix `V@G@V.T`; PSD var |
-| **UnconstrainedQP** | 0.39×                   | `kron(I, diag(var))` sandwiched between dense DFT matrices       |
-| **Murray (gini)**   | 0.22×                   | 244650×700 **dense** constant matrix (99.7% zeros) @ variable    |
-| TvInpainting        | 0.81×                   | minor; sub-second problem, FFI/setup-bound                      |
+| Benchmark | Rust (ms) | SCIPY (ms) | SCIPY/Rust | Δ vs pre-rebase |
+| --- | --- | --- | --- | --- |
+| OptimalAdvertising | 261 | 542 | **2.08×** | 1.02× |
+| SimpleQPBenchmark | 798 | 1614 | **2.02×** | 1.00× |
+| Cajas | 360 | 677 | **1.88×** | 0.99× |
+| LeastSquares | 798 | 1465 | **1.83×** | 1.03× |
+| SimpleLPBenchmark | 2861 | 5134 | **1.79×** | 1.01× |
+| SemidefiniteProgramming | 371 | 650 | **1.75×** | 0.93× |
+| FactorCovarianceModel | 573 | 992 | **1.73×** | 1.03× |
+| Yitzhaki | 525 | 865 | **1.65×** | 1.03× |
+| SimpleScalarParametrizedLPBenchmark | 683 | 994 | **1.46×** | 1.01× |
+| SVMWithL1Regularization | 1601 | 2293 | **1.43×** | 1.01× |
+| HuberRegression | 1765 | 2495 | **1.41×** | 1.00× |
+| SlowPruningBenchmark | 1353 | 1882 | **1.39×** | 1.02× |
+| CVaRBenchmark | 4736 | 5838 | **1.23×** | 1.17× |
+| ConvexPlasticity | 53 | 57 | **1.07×** | 0.16× |
+| Murray | 1024 | 1069 | 1.04× | **2.51×** |
+| TvInpainting | 889 | 769 | 0.87× | 1.05× |
+| QuantumHilbertMatrix | 1370 | 800 | 0.58× | 0.99× |
+| UnconstrainedQP | 3606 | 1003 | 0.28× | 1.06× |
+| SDPSegfault1132Benchmark | 29113 | 1336 | 0.05× | 1.04× |
+| ParametrizedQPBenchmark | 1561 | — | SCIPY timeout >240 s | |
 
-### Mechanism 1 — kron + diag-of-dense-affine (SDP1132, UnconstrainedQP)
+**geomean 1.09× | 15/19 wins**
 
-Both build a large, **fully dense** canonical block from a small variable:
+### RUST vs CPP
 
-- **SDP1132**: `cp.diag(V @ G @ V.T)` extracts the diagonal of a Gram matrix that is dense-affine in
-  the PSD variable `G` (every one of the n² entries is a combination of *all* of G's entries), then
-  `cp.kron(e, …)` broadcasts that diagonal n times. diag-of-dense-affine **× kron** is what explodes
-  the COO tensor — not `diag` alone.
-- **UnconstrainedQP**: `cp.kron(np.diag(ones(14)), cp.diag(var))` is a 252×252 block-diagonal operator
-  in 18 variables, sandwiched as `H_H @ Err_est @ H` between dense (complex) DFT matrices — expanding
-  18 variables into a dense ~252×252×2 coefficient.
+| Benchmark | Rust (ms) | CPP (ms) | CPP/Rust | Δ vs pre-rebase |
+| --- | --- | --- | --- | --- |
+| OptimalAdvertising | 261 | 1927 | **7.38×** | 1.07× |
+| Cajas | 360 | 1743 | **4.84×** | 0.94× |
+| SemidefiniteProgramming | 371 | 765 | **2.06×** | 0.90× |
+| SimpleLPBenchmark | 2861 | 5502 | **1.92×** | 1.04× |
+| SimpleQPBenchmark | 798 | 1487 | **1.86×** | 0.97× |
+| FactorCovarianceModel | 573 | 964 | **1.68×** | 1.05× |
+| SimpleScalarParametrizedLPBenchmark | 683 | 1074 | **1.57×** | 1.03× |
+| Yitzhaki | 525 | 781 | **1.49×** | 1.02× |
+| SVMWithL1Regularization | 1601 | 2321 | **1.45×** | 1.01× |
+| CVaRBenchmark | 4736 | 6317 | **1.33×** | 0.99× |
+| HuberRegression | 1765 | 2335 | **1.32×** | 0.98× |
+| LeastSquares | 798 | 972 | **1.22×** | 0.99× |
+| SlowPruningBenchmark | 1353 | 1488 | **1.10×** | 1.00× |
+| ConvexPlasticity | 53 | 56 | **1.06×** | 0.92× |
+| Murray | 1024 | 991 | 0.97× | **2.53×** |
+| TvInpainting | 889 | 746 | 0.84× | 1.03× |
+| QuantumHilbertMatrix | 1370 | 868 | 0.63× | 0.92× |
+| UnconstrainedQP | 3606 | 973 | 0.27× | 0.85× |
+| SDPSegfault1132Benchmark | 29113 | 6987 | 0.24× | 1.07× |
+| ParametrizedQPBenchmark | 1561 | — | CPP killed: RSS >9 GB | |
 
-The Rust backend appears to materialize/sort far more COO entries than SciPy's specialized paths for
-these operators. SDP1132 alone dominates the geomean; drop it and the vs-SciPy geomean rises markedly.
+**geomean 1.29× | 14/19 wins**
 
-### Mechanism 2 — dense constant that should be sparse (Murray)
+### RUST vs COO
 
-Murray has **no kron and no `cp.diag`**. It builds `mat = np.zeros((244650, 700))` and writes a single
-`+1` and `−1` per row — a ~171M-entry constant that is **99.7% zero** — then does `mat @ ret_w`. Because
-`mat` reaches the backend as a *dense* `Constant`, the Rust dense-mul arm
-(`arithmetic.rs::mul_const_by_variable`) pays a full **O(rows·cols)** walk over all 171M cells — once in
-the `data.iter().filter(...).count()` nnz pre-scan (`arithmetic.rs:737`) and again in the
-`for c { for r { … } }` emission loop (`arithmetic.rs:757`) — even though it correctly *skips emitting*
-the zeros. SciPy/CPP exploit the sparsity and touch only the ~489K nonzeros. **Fix:** detect a
-mostly-zero dense `Constant` and convert it to CSC before the multiply.
+| Benchmark | Rust (ms) | COO (ms) | COO/Rust | Δ vs pre-rebase |
+| --- | --- | --- | --- | --- |
+| SemidefiniteProgramming | 371 | 945 | **2.55×** | — |
+| SimpleQPBenchmark | 798 | 1591 | **1.99×** | — |
+| OptimalAdvertising | 261 | 487 | **1.86×** | — |
+| LeastSquares | 798 | 1476 | **1.85×** | — |
+| Cajas | 360 | 644 | **1.79×** | — |
+| SimpleLPBenchmark | 2861 | 5069 | **1.77×** | — |
+| FactorCovarianceModel | 573 | 1002 | **1.75×** | — |
+| Yitzhaki | 525 | 869 | **1.66×** | — |
+| SVMWithL1Regularization | 1601 | 2433 | **1.52×** | — |
+| SimpleScalarParametrizedLPBenchmark | 683 | 987 | **1.44×** | — |
+| HuberRegression | 1765 | 2510 | **1.42×** | — |
+| SlowPruningBenchmark | 1353 | 1903 | **1.41×** | — |
+| CVaRBenchmark | 4736 | 5781 | **1.22×** | — |
+| ConvexPlasticity | 53 | 56 | **1.05×** | — |
+| Murray | 1024 | 1070 | 1.04× | — |
+| ParametrizedQPBenchmark | 1561 | 1209 | 0.77× | — |
+| TvInpainting | 889 | 685 | 0.77× | — |
+| QuantumHilbertMatrix | 1370 | 841 | 0.61× | — |
+| UnconstrainedQP | 3606 | 2078 | 0.58× | — |
+| SDPSegfault1132Benchmark | 29113 | 8392 | 0.29× | — |
 
-`TvInpainting` (0.81×) is a different, benign story: a sub-second problem where fixed per-call overhead
-(FFI + setup) is a meaningful fraction of the total, so the backend choice barely matters.
+**geomean 1.22× | 15/20 wins** (no pre-rebase COO baseline exists)
 
 ---
 
-## Not measurable (excluded from aggregates)
+## 2. In-repo synthetic suite (`benchmark_suite.py`, 40 cases, build_matrix layer)
 
-- **4× `matrix_stuffing.py` classes** — `ConeMatrixStuffingBench`, `ParamConeMatrixStuffing`,
-`ParamSmallMatrixStuffing`, `SmallMatrixStuffing`. These call
-`ConeMatrixStuffing().apply(self.problem)` directly inside `time_compile_problem()` and **never call
-`get_problem_data`**, so the canon-backend injection has nothing to wrap. Reported as N/A — not a
-failure, just outside this harness's measurement point.
-- **2× fully-parametrized problems OOM-killed (rc=137), ignored per request** —
-`SimpleFullyParametrizedLPBenchmark` (n=10⁶ `Parameter`) and `ParametrizedQPBenchmark`
-(m=6000, n=2400 fully-parametrized A, b). Both emit cvxpy's *"too many parameters for efficient DPP
-compilation"* warning and exhaust memory during DPP expansion before any backend timing is recorded.
-Because the process dies before the first measurement, the cost cannot be attributed to a specific
-backend; the DPP parameter blow-up is the proximate cause, not the Rust path. Excluded.
+- **SCIPY/RUST: geomean 4.81×**, range [1.96×, 72.2×], **RUST wins 40/40**
+- **CPP/RUST: geomean 2.05×**, range [1.20×, 16.0×], **RUST wins 40/40**
+- **COO/RUST: geomean 3.48×**, range [1.43×, 49.0×], **RUST wins 40/40**
+
+(Raw data: `suite_4backend.json` / `suite_4backend.log`.)
+
+## 3. Exhaustive per-atom sweep (`benchmark_suite.py --atoms`, 75 atoms, end-to-end)
+
+- **SCIPY/RUST: geomean 1.49×, worst 1.07× — RUST wins 75/75**
+- SCIPY/CPP: geomean 1.39× (70/70); SCIPY/COO: geomean 1.17× (69/75)
+
+Every atom family — affine/structural (incl. einsum, ND ops, broadcast_to, convolve, both kron
+orientations, partial_trace/transpose), elementwise, and matrix/reduction cone atoms — compiles
+fastest through RUST. (Raw data: `atoms_4backend.json` / `atoms_4backend.log`.)
+
+## 4. ASV backend suite (`asv run --python=same`, cvxpy-benchmarks)
+
+Per-class geomeans of OTHER/RUST across all cases (full tables: `asv_report.md`):
+
+| ASV class | SCIPY/RUST | CPP/RUST | COO/RUST |
+| --- | --- | --- | --- |
+| BackendCompileCanonicalization (16 cases) | 1.95× | 1.46× | 1.40× |
+| BackendBuildMatrixCanonicalization (16 cases) | 3.96× | 2.13× | 1.83× |
+| DeepExpressionTreeScaling (depth 4→256) | 1.31× | 1.14× | 1.10× |
+| WideExpressionTreeScaling (width 8→256) | 1.99× | 1.03× | 2.82× |
+
+Highlights: `murray_dense_above_threshold` (genuinely dense constant) — RUST 33.6 ms vs ~91 ms on
+all three others (2.7×), so the sparsification heuristic does not tax the dense path;
+`parameterized_lp` build_matrix — COO 0.30 ms vs RUST 0.51 ms vs CPP 75 ms vs SCIPY 249 ms
+(COO's O(nnz) parameter handling is the one structural advantage RUST hasn't matched).
 
 ---
 
-## Bottom line
+## Remaining losses and follow-ups
 
-- On real, solvable problems the **Rust backend is the fastest of the three backends** — geomean
-**1.14× vs SciPy** and **1.38× vs CPP**, winning 15/19 and 14/19 respectively, with several 1.5–3×
-wins.
-- The losses come from **two separate weaknesses**, each a clear next step:
-  1. **kron + diag-of-dense-affine SDP/QP construction** (SDPSegfault1132, UnconstrainedQP) — Rust
-     materializes far more COO entries than SciPy's specialized operator paths. SDP1132 (0.06×)
-     dominates the geomean and is the single biggest lever.
-  2. **dense-constant-not-sparsified** (Murray, 0.22×) — a 99.7%-zero dense `Constant` walked
-     densely by `mul_const_by_variable`; convert mostly-zero dense constants to CSC before the multiply.
+| Case | Ratio (vs best rival) | Mechanism | Status |
+| --- | --- | --- | --- |
+| ~~Murray (gini)~~ | ~~0.22×~~ → **1.04×** | dense mostly-zero constant walked in full | **fixed** (sparsification, `7bf07625c`) |
+| SDPSegfault1132 | 0.05× vs SCIPY | `diag` of dense-affine: m² iteration + full COO sort in `specialized.rs::process_diag_mat` | follow-up |
+| UnconstrainedQP | 0.27× vs CPP | `kron` eagerly allocates a dense lhs×rhs row-index map (`specialized.rs::process_kron_r/l`) | follow-up (sparsification already cut it 4938→3606 ms) |
+| QuantumHilbertMatrix | 0.58× vs SCIPY | kron + partial_transpose, same mechanism family | follow-up |
+| TvInpainting | 0.77× vs COO | small structured loss, unprofiled | follow-up |
+| ParametrizedQP / parameterized_lp | 0.77× vs COO | COO's O(nnz) parameter tensors | expected: COO's design point; RUST is 2nd of 4 (SCIPY times out, CPP OOMs) |
 
-### Reproduce
-
-```sh
-# from rust_benchmarks/ tmp harness:
-zsh sweep.sh           # runs all 25 classes, one subprocess each -> results.jsonl
-# single benchmark, all backends:
-python run_one.py <benchmarks>/benchmark/simple_QP_benchmarks.py LeastSquares RUST,SCIPY,CPP 1 2 150
-```
-
+Notes for reading the Δ column: `ConvexPlasticity`'s Δ (0.16×) reflects an upstream change to the
+benchmark itself (it now compiles in ~55 ms vs ~18–57 s pre-rebase) — not a Rust regression.
+`#3366` on master does not affect canonicalization timings for any backend (it optimizes the
+NLP diff_engine path).
