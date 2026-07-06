@@ -5,7 +5,7 @@ in-repo synthetic suite, ASV backend suite, and the exhaustive per-atom sweep, c
 canonicalization backend head-to-head with the `SCIPY`, `CPP` (cvxcore), and `COO` backends.
 
 - **Date:** 2026-07-03
-- **Branch:** `alan/rust-backend-1.9` — the Rust backend ported onto upstream cvxpy master
+- **Branch:** `ray/rust-backend-1.9` — the Rust backend ported onto upstream cvxpy master
   (`40947203c`, ~1.9.2-dev) plus the dense-constant sparsification fix (`7bf07625c`)
 - **Machine:** macOS (darwin 25.5.0), 18 GB, `.venv` Python 3.13, release build
 - **What is measured:** wall-clock of `Problem.get_problem_data(...)` (canonicalization / matrix
