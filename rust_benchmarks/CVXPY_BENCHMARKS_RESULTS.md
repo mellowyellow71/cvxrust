@@ -36,10 +36,11 @@ fresh `Problem` per rep to defeat the solving-chain cache, backend injected via 
 `get_problem_data` wrapper), with: **1 warm-up + 3 timed reps** (median), a 240 s SIGALRM watchdog,
 and COO added. Sub-10% gaps are noise.
 
-Two cells could not be measured, both on `ParametrizedQPBenchmark` (a fully parametrized QP —
-the COO backend's native workload): **SCIPY timed out (>240 s)** and **CPP was killed at >9 GB
-RSS** by a memory watchdog (unguarded, this cell froze/crashed the host twice). RUST completed it
-in 1.6 s and COO in 1.2 s.
+Four cells could not be measured, all on the two fully-parametrized classes (huge parameters —
+the COO backend's native workload). `ParametrizedQPBenchmark`: **SCIPY timed out (>240 s)** and
+**CPP was killed at >9 GB RSS** by a memory watchdog (unguarded, this cell froze/crashed the host
+twice); RUST completed it in 1.6 s, COO in 1.2 s. `SimpleFullyParametrizedLPBenchmark`: **the OS
+killed both SCIPY and CPP for memory exhaustion**, while RUST (325 ms) beat COO (451 ms).
 
 ---
 
@@ -73,6 +74,7 @@ All times are **median milliseconds** for canonicalization. Ratios are **>1 ⇒ 
 | UnconstrainedQP | 3606 | 1003 | 0.28× | 1.06× |
 | SDPSegfault1132Benchmark | 29113 | 1336 | 0.05× | 1.04× |
 | ParametrizedQPBenchmark | 1561 | — | SCIPY timeout >240 s | |
+| SimpleFullyParametrizedLPBenchmark | 325 | — | SCIPY killed by OS (memory) | |
 
 **geomean 1.09× | 15/19 wins**
 
@@ -100,6 +102,7 @@ All times are **median milliseconds** for canonicalization. Ratios are **>1 ⇒ 
 | UnconstrainedQP | 3606 | 973 | 0.27× | 0.85× |
 | SDPSegfault1132Benchmark | 29113 | 6987 | 0.24× | 1.07× |
 | ParametrizedQPBenchmark | 1561 | — | CPP killed: RSS >9 GB | |
+| SimpleFullyParametrizedLPBenchmark | 325 | — | CPP killed by OS (memory) | |
 
 **geomean 1.29× | 14/19 wins**
 
@@ -119,6 +122,7 @@ All times are **median milliseconds** for canonicalization. Ratios are **>1 ⇒ 
 | SimpleScalarParametrizedLPBenchmark | 683 | 987 | **1.44×** | — |
 | HuberRegression | 1765 | 2510 | **1.42×** | — |
 | SlowPruningBenchmark | 1353 | 1903 | **1.41×** | — |
+| SimpleFullyParametrizedLPBenchmark | 325 | 451 | **1.38×** | — |
 | CVaRBenchmark | 4736 | 5781 | **1.22×** | — |
 | ConvexPlasticity | 53 | 56 | **1.05×** | — |
 | Murray | 1024 | 1070 | 1.04× | — |
@@ -128,7 +132,7 @@ All times are **median milliseconds** for canonicalization. Ratios are **>1 ⇒ 
 | UnconstrainedQP | 3606 | 2078 | 0.58× | — |
 | SDPSegfault1132Benchmark | 29113 | 8392 | 0.29× | — |
 
-**geomean 1.22× | 15/20 wins** (no pre-rebase COO baseline exists)
+**geomean 1.23× | 16/21 wins** (no pre-rebase COO baseline exists)
 
 ---
 
@@ -176,7 +180,7 @@ all three others (2.7×), so the sparsification heuristic does not tax the dense
 | UnconstrainedQP | 0.27× vs CPP | `kron` eagerly allocates a dense lhs×rhs row-index map (`specialized.rs::process_kron_r/l`) | follow-up (sparsification already cut it 4938→3606 ms) |
 | QuantumHilbertMatrix | 0.58× vs SCIPY | kron + partial_transpose, same mechanism family | follow-up |
 | TvInpainting | 0.77× vs COO | small structured loss, unprofiled | follow-up |
-| ParametrizedQP / parameterized_lp | 0.77× vs COO | COO's O(nnz) parameter tensors | expected: COO's design point; RUST is 2nd of 4 (SCIPY times out, CPP OOMs) |
+| ParametrizedQP / parameterized_lp | 0.77× vs COO | COO's O(nnz) parameter tensors | COO's design point — yet RUST wins the sibling SimpleFullyParametrizedLP (1.38×) and is the only other backend to survive either |
 
 Notes for reading the Δ column: `ConvexPlasticity`'s Δ (0.16×) reflects an upstream change to the
 benchmark itself (it now compiles in ~55 ms vs ~18–57 s pre-rebase) — not a Rust regression.
