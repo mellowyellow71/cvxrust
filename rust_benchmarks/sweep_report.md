@@ -15,6 +15,7 @@
 | SimpleScalarParametrizedLPBenchmark | 683 | 987 | **1.44×** | — |
 | HuberRegression | 1765 | 2510 | **1.42×** | — |
 | SlowPruningBenchmark | 1353 | 1903 | **1.41×** | — |
+| SimpleFullyParametrizedLPBenchmark | 325 | 451 | **1.38×** | — |
 | CVaRBenchmark | 4736 | 5781 | **1.22×** | — |
 | ConvexPlasticity | 53 | 56 | **1.05×** | — |
 | Murray | 1024 | 1070 | 1.04× | — |
@@ -24,7 +25,7 @@
 | UnconstrainedQP | 3606 | 2078 | 0.58× | — |
 | SDPSegfault1132Benchmark | 29113 | 8392 | 0.29× | — |
 
-**geomean 1.22× | 15/20 wins (ratio >1 ⇒ Rust faster)**
+**geomean 1.23× | 16/21 wins (ratio >1 ⇒ Rust faster)**
 
 ## RUST vs CPP
 
@@ -50,6 +51,7 @@
 | UnconstrainedQP | 3606 | 973 | 0.27× | 0.85× |
 | SDPSegfault1132Benchmark | 29113 | 6987 | 0.24× | 1.07× |
 | ParametrizedQPBenchmark | — | — | error | |
+| SimpleFullyParametrizedLPBenchmark | — | — | error | |
 
 **geomean 1.29× | 14/19 wins (ratio >1 ⇒ Rust faster)**
 
@@ -77,5 +79,6 @@
 | UnconstrainedQP | 3606 | 1003 | 0.28× | 1.06× |
 | SDPSegfault1132Benchmark | 29113 | 1336 | 0.05× | 1.04× |
 | ParametrizedQPBenchmark | — | — | timeout | |
+| SimpleFullyParametrizedLPBenchmark | — | — | error | |
 
 **geomean 1.09× | 15/19 wins (ratio >1 ⇒ Rust faster)**
