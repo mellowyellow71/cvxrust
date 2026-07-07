@@ -1087,6 +1087,41 @@ class TestRustBackendEndToEnd:
 
         assert np.allclose(scipy_x, rust_x, atol=1e-5)
 
+    @pytest.mark.parametrize("name,make_expr", [
+        ("mul_batched", lambda x, rng: rng.standard_normal((2, 5, 3)) @ x),
+        ("mul_broadcast_2d", lambda x, rng: rng.standard_normal((5, 3)) @ x),
+        ("rmul_batched", lambda x, rng: x @ rng.standard_normal((2, 4, 5))),
+        ("rmul_broadcast_2d", lambda x, rng: x @ rng.standard_normal((4, 5))),
+    ])
+    def test_nd_matmul_matches_scipy(self, name, make_expr):
+        """ND (batched/broadcast) matmul produces the same stuffed tensor as SCIPY."""
+        import cvxpy as cp
+
+        rng = np.random.default_rng(0)
+        x = cp.Variable((2, 3, 4))
+        expr = make_expr(x, rng)
+        target = rng.standard_normal(expr.shape)
+        objective = cp.Minimize(cp.sum_squares((expr - target).flatten(order="F")))
+
+        matrices = {}
+        for backend in (cp.SCIPY_CANON_BACKEND, cp.RUST_CANON_BACKEND):
+            problem = cp.Problem(objective)
+            data, *_ = problem.get_problem_data(solver=cp.CLARABEL, canon_backend=backend)
+            matrices[backend] = sparse.csc_matrix(data["A"])
+        diff = matrices[cp.SCIPY_CANON_BACKEND] - matrices[cp.RUST_CANON_BACKEND]
+        assert diff.nnz == 0 or abs(diff).max() < 1e-12
+
+    def test_nd_parametric_matmul_raises(self):
+        """ND matmul with a Parameter operand is unsupported and raises clearly."""
+        import cvxpy as cp
+
+        rng = np.random.default_rng(0)
+        x = cp.Variable((2, 3, 4))
+        p = cp.Parameter((2, 5, 3), value=rng.standard_normal((2, 5, 3)))
+        problem = cp.Problem(cp.Minimize(cp.sum_squares((p @ x).flatten(order="F"))))
+        with pytest.raises(ValueError, match="ND parametric matmul is not supported"):
+            problem.get_problem_data(solver=cp.CLARABEL, canon_backend=cp.RUST_CANON_BACKEND)
+
     def test_order_c_unsupported(self):
         """build_matrix(order='C') raises: only column-major is implemented."""
         variable_lin_op = linOpHelper((2, 2), type="variable", data=1)

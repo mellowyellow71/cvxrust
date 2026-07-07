@@ -21,7 +21,18 @@ import numpy as np
 import scipy.sparse as sp
 
 from cvxpy.lin_ops import LinOp
-from cvxpy.lin_ops.backends.base import CanonBackend
+from cvxpy.lin_ops.backends.base import (
+    CanonBackend,
+    get_nd_matmul_dims,
+    get_nd_rmul_dims,
+    is_batch_varying,
+)
+from cvxpy.lin_ops.backends.scipy_backend import (
+    _apply_nd_kron_structure_mul,
+    _apply_nd_kron_structure_rmul,
+    _build_interleaved_matrix_mul,
+    _build_interleaved_matrix_rmul,
+)
 from cvxpy.settings import SPARSE_DENSITY_THRESHOLD
 
 # Dense constants at least this large are scanned for sparsity; mostly-zero
@@ -64,6 +75,45 @@ def _append_axis_data(meta: list, axis, keepdims) -> None:
         meta.append(len(axes))
         meta.extend(int(a) for a in axes)
     meta.append(1 if keepdims else 0)
+
+
+def _nd_matmul_operator(op_type: str, const: LinOp, var_shape: tuple) -> sp.sparray:
+    """
+    The 2D sparse operator M with vec_F(out) = M @ vec_F(arg) for an ND
+    (batched or broadcast) matmul with constant data. Built with the same
+    helpers the SCIPY backend uses, so the semantics match it exactly.
+    """
+    const_shape = const.shape
+    if op_type == "mul":
+        if is_batch_varying(const_shape):
+            return _build_interleaved_matrix_mul(const.data, const_shape, var_shape)
+        batch_size, n, _ = get_nd_matmul_dims(const_shape, var_shape)
+        lhs = const.data
+        if sp.issparse(lhs):
+            lhs = sp.csr_array(lhs)
+        else:
+            arr = np.asarray(lhs, dtype=np.float64)
+            if arr.ndim > 2:
+                arr = arr.reshape(arr.shape[-2:])  # trivial batch dims, e.g. (1, m, k)
+            elif arr.ndim < 2:
+                arr = arr.reshape((1, arr.size))  # 1D constant acts as a row vector
+            lhs = sp.csr_array(arr)
+        return _apply_nd_kron_structure_mul(lhs, batch_size, n)
+
+    if is_batch_varying(const_shape):
+        return _build_interleaved_matrix_rmul(const.data, const_shape, var_shape)
+    batch_size, m, _, _ = get_nd_rmul_dims(var_shape, const_shape)
+    rhs = const.data
+    if sp.issparse(rhs):
+        rhs = sp.csr_array(rhs)
+    else:
+        arr = np.asarray(rhs, dtype=np.float64)
+        if arr.ndim > 2:
+            arr = arr.reshape(arr.shape[-2:])
+        elif arr.ndim < 2:
+            arr = arr.reshape((arr.size, 1))  # 1D constant acts as a column vector
+        rhs = sp.csr_array(arr)
+    return _apply_nd_kron_structure_rmul(rhs, batch_size, m)
 
 
 def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
@@ -125,6 +175,31 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
         float_offset += len(vals)
         int_offset += len(indices) + len(indptr)
 
+    def _emit_nd_matmul(lin_op):
+        # ND (batched/broadcast) matmul: the Rust mul/rmul kernels are 2D-only,
+        # so emit the equivalent flat form — a 2D sparse operator against the
+        # F-order-flattened argument. Parents are unaffected: the node's rows
+        # are the F-order entries of its value either way.
+        data = lin_op.data
+        if data.type not in ("dense_const", "sparse_const"):
+            raise ValueError(
+                "ND parametric matmul is not supported by the RUST "
+                "canonicalization backend"
+            )
+        arg = lin_op.args[0]
+        matrix = _nd_matmul_operator(lin_op.type, data, arg.shape)
+        out_size = int(np.prod(lin_op.shape))
+        in_size = int(np.prod(arg.shape))
+        if matrix.shape != (out_size, in_size):
+            raise ValueError(
+                f"ND matmul operator shape {matrix.shape} does not match "
+                f"({out_size}, {in_size}) for LinOp {lin_op.type!r}"
+            )
+        extend((op_map["mul"], 1, out_size, 1, 6))
+        _emit_sparse(op_map["sparse_const"], matrix.shape, 0, matrix)
+        extend((op_map["reshape"], 1, in_size, 1, 0))
+        _serialize_node(arg)
+
     def _serialize_node(lin_op):
         nonlocal float_offset, int_offset
 
@@ -162,6 +237,14 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
                 extend((op_map[t], len(shape), *shape, nargs,
                         3, float_offset, n, arr.ndim, *arr.shape))
                 float_offset += n
+
+        elif t in ("mul", "rmul") and (
+            len(shape) > 2
+            or len(lin_op.args[0].shape) > 2
+            or len(getattr(data, "shape", ())) > 2
+        ):
+            _emit_nd_matmul(lin_op)
+            return
 
         elif t in linop_data_ops:
             # Data is a LinOp — serialized inline after this node, before args
