@@ -32,10 +32,10 @@ four-backend performance evidence, and only then open the backend PR.
 | Live benchmark PR checkout | `rust_benchmarks/cvxpy-benchmarks` | `backend-canonicalization-benchmarks` | `006e7cd7f` |
 
 The local `codex/*` names are worktree implementation details. GitHub branches are on
-the `mellowyellow71` fork and intentionally omit that prefix:
+the `mellowyellow71/cvxrust` fork and intentionally omit that prefix:
 
-- `mellowyellow71/rust-rebase-20260720`
-- `mellowyellow71/rust-backend-pr-20260721`
+- `mellowyellow71/cvxrust:rust-rebase-20260720`
+- `mellowyellow71/cvxrust:rust-backend-pr-20260721`
 
 Do not push `codex/benchmarks-integration-20260720`; it is only a local test merge of
 benchmark main plus PR #32.
