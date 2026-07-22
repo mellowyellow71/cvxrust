@@ -45,14 +45,15 @@ def load_asv(path: str) -> dict[tuple[str, str, str], float]:
             params = entry.get("params")
         else:
             values, params = entry[0], entry[1] if len(entry) > 1 else None
-        if values is None or params is None:
+        if values is None or params is None or len(params) < 2:
             continue
         cases, backends = params[0], params[1]
         idx = 0
         for case in cases:
             for backend in backends:
-                if idx < len(values) and values[idx] is not None:
-                    out[(bench_name, case.strip("'\""), backend.strip("'\""))] = values[idx]
+                value = values[idx] if idx < len(values) else None
+                if isinstance(value, (int, float)) and math.isfinite(value):
+                    out[(bench_name, case.strip("'\""), backend.strip("'\""))] = value
                 idx += 1
     return out
 

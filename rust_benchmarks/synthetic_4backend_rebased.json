@@ -1,0 +1,4167 @@
+{
+  "metadata": {
+    "suite_version": "1.0.0",
+    "environment": {
+      "python_version": "3.13.5",
+      "numpy_version": "2.4.4",
+      "scipy_version": "1.17.1",
+      "cvxpy_version": "1.10.0.dev86+g63503228d.d20260721",
+      "blas": "accelerate unknown",
+      "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+      "architecture": "arm64",
+      "cpu_count": 11,
+      "cpu_brand": "unknown",
+      "os": "Darwin",
+      "rayon_num_threads": "1",
+      "omp_num_threads": "1",
+      "timestamp": "2026-07-22T06:50:43.184446+00:00",
+      "git_hash": "1cf5de2ef",
+      "cvxpy_rust_available": true,
+      "cvxpy_rust_path": "/Users/revantkasichainula/cvxpy/.venv/lib/python3.13/site-packages/cvxpy_rust/__init__.py"
+    },
+    "config": {
+      "mode": "quick",
+      "layers": "bm",
+      "backends": [
+        "RUST",
+        "SCIPY",
+        "CPP",
+        "COO"
+      ],
+      "seed": 42,
+      "single_thread": true,
+      "sizes": "all"
+    }
+  },
+  "results": [
+    {
+      "problem": "dense_matmul (n=50)",
+      "category": "A: Arithmetic",
+      "size_label": "small",
+      "dominant_ops": [
+        "dense_const",
+        "mul",
+        "sum_entries"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.063,
+            "median_ms": 0.063,
+            "std_ms": 0.004,
+            "min_ms": 0.059,
+            "max_ms": 0.068,
+            "ci_95": [
+              0.058,
+              0.067
+            ],
+            "cv": 0.0561,
+            "n_samples": 5,
+            "raw_ms": [
+              0.063,
+              0.063,
+              0.068,
+              0.061,
+              0.059
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.124,
+            "median_ms": 0.123,
+            "std_ms": 0.006,
+            "min_ms": 0.116,
+            "max_ms": 0.132,
+            "ci_95": [
+              0.117,
+              0.132
+            ],
+            "cv": 0.0498,
+            "n_samples": 5,
+            "raw_ms": [
+              0.129,
+              0.123,
+              0.132,
+              0.123,
+              0.116
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.096,
+            "median_ms": 0.09,
+            "std_ms": 0.013,
+            "min_ms": 0.083,
+            "max_ms": 0.114,
+            "ci_95": [
+              0.081,
+              0.112
+            ],
+            "cv": 0.1305,
+            "n_samples": 5,
+            "raw_ms": [
+              0.114,
+              0.105,
+              0.09,
+              0.09,
+              0.083
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.094,
+            "median_ms": 0.093,
+            "std_ms": 0.01,
+            "min_ms": 0.086,
+            "max_ms": 0.109,
+            "ci_95": [
+              0.082,
+              0.106
+            ],
+            "cv": 0.1018,
+            "n_samples": 5,
+            "raw_ms": [
+              0.094,
+              0.109,
+              0.093,
+              0.086,
+              0.086
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.982
+        }
+      }
+    },
+    {
+      "problem": "dense_matmul (n=200)",
+      "category": "A: Arithmetic",
+      "size_label": "medium",
+      "dominant_ops": [
+        "dense_const",
+        "mul",
+        "sum_entries"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.065,
+            "median_ms": 0.065,
+            "std_ms": 0.004,
+            "min_ms": 0.061,
+            "max_ms": 0.071,
+            "ci_95": [
+              0.06,
+              0.069
+            ],
+            "cv": 0.0577,
+            "n_samples": 5,
+            "raw_ms": [
+              0.065,
+              0.071,
+              0.061,
+              0.062,
+              0.065
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.118,
+            "median_ms": 0.115,
+            "std_ms": 0.005,
+            "min_ms": 0.113,
+            "max_ms": 0.125,
+            "ci_95": [
+              0.111,
+              0.124
+            ],
+            "cv": 0.0453,
+            "n_samples": 5,
+            "raw_ms": [
+              0.125,
+              0.115,
+              0.113,
+              0.122,
+              0.114
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.091,
+            "median_ms": 0.091,
+            "std_ms": 0.009,
+            "min_ms": 0.083,
+            "max_ms": 0.106,
+            "ci_95": [
+              0.081,
+              0.102
+            ],
+            "cv": 0.094,
+            "n_samples": 5,
+            "raw_ms": [
+              0.091,
+              0.086,
+              0.083,
+              0.106,
+              0.091
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.088,
+            "median_ms": 0.087,
+            "std_ms": 0.003,
+            "min_ms": 0.084,
+            "max_ms": 0.094,
+            "ci_95": [
+              0.084,
+              0.092
+            ],
+            "cv": 0.0397,
+            "n_samples": 5,
+            "raw_ms": [
+              0.088,
+              0.087,
+              0.087,
+              0.094,
+              0.084
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.817
+        }
+      }
+    },
+    {
+      "problem": "dense_matmul (n=500)",
+      "category": "A: Arithmetic",
+      "size_label": "large",
+      "dominant_ops": [
+        "dense_const",
+        "mul",
+        "sum_entries"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.058,
+            "median_ms": 0.056,
+            "std_ms": 0.003,
+            "min_ms": 0.056,
+            "max_ms": 0.063,
+            "ci_95": [
+              0.054,
+              0.062
+            ],
+            "cv": 0.0558,
+            "n_samples": 5,
+            "raw_ms": [
+              0.063,
+              0.06,
+              0.056,
+              0.056,
+              0.056
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.121,
+            "median_ms": 0.114,
+            "std_ms": 0.013,
+            "min_ms": 0.113,
+            "max_ms": 0.144,
+            "ci_95": [
+              0.105,
+              0.137
+            ],
+            "cv": 0.1079,
+            "n_samples": 5,
+            "raw_ms": [
+              0.144,
+              0.119,
+              0.114,
+              0.113,
+              0.114
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.085,
+            "median_ms": 0.082,
+            "std_ms": 0.006,
+            "min_ms": 0.08,
+            "max_ms": 0.095,
+            "ci_95": [
+              0.078,
+              0.093
+            ],
+            "cv": 0.0712,
+            "n_samples": 5,
+            "raw_ms": [
+              0.095,
+              0.088,
+              0.082,
+              0.081,
+              0.08
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.086,
+            "median_ms": 0.085,
+            "std_ms": 0.001,
+            "min_ms": 0.084,
+            "max_ms": 0.087,
+            "ci_95": [
+              0.084,
+              0.087
+            ],
+            "cv": 0.0122,
+            "n_samples": 5,
+            "raw_ms": [
+              0.087,
+              0.085,
+              0.085,
+              0.087,
+              0.084
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.072
+        }
+      }
+    },
+    {
+      "problem": "dense_matmul (n=1000)",
+      "category": "A: Arithmetic",
+      "size_label": "large",
+      "dominant_ops": [
+        "dense_const",
+        "mul",
+        "sum_entries"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.058,
+            "median_ms": 0.056,
+            "std_ms": 0.004,
+            "min_ms": 0.055,
+            "max_ms": 0.063,
+            "ci_95": [
+              0.053,
+              0.064
+            ],
+            "cv": 0.0719,
+            "n_samples": 5,
+            "raw_ms": [
+              0.063,
+              0.056,
+              0.055,
+              0.056,
+              0.063
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.118,
+            "median_ms": 0.116,
+            "std_ms": 0.004,
+            "min_ms": 0.115,
+            "max_ms": 0.125,
+            "ci_95": [
+              0.113,
+              0.123
+            ],
+            "cv": 0.0346,
+            "n_samples": 5,
+            "raw_ms": [
+              0.125,
+              0.118,
+              0.115,
+              0.116,
+              0.116
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.082,
+            "median_ms": 0.083,
+            "std_ms": 0.003,
+            "min_ms": 0.078,
+            "max_ms": 0.086,
+            "ci_95": [
+              0.079,
+              0.086
+            ],
+            "cv": 0.0336,
+            "n_samples": 5,
+            "raw_ms": [
+              0.083,
+              0.081,
+              0.078,
+              0.086,
+              0.083
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.086,
+            "median_ms": 0.086,
+            "std_ms": 0.002,
+            "min_ms": 0.083,
+            "max_ms": 0.089,
+            "ci_95": [
+              0.084,
+              0.089
+            ],
+            "cv": 0.024,
+            "n_samples": 5,
+            "raw_ms": [
+              0.086,
+              0.083,
+              0.087,
+              0.086,
+              0.089
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.017
+        }
+      }
+    },
+    {
+      "problem": "sparse_matmul (n=100)",
+      "category": "A: Arithmetic",
+      "size_label": "small",
+      "dominant_ops": [
+        "sparse_const",
+        "mul",
+        "sum_entries"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.057,
+            "median_ms": 0.057,
+            "std_ms": 0.003,
+            "min_ms": 0.054,
+            "max_ms": 0.06,
+            "ci_95": [
+              0.054,
+              0.06
+            ],
+            "cv": 0.0478,
+            "n_samples": 5,
+            "raw_ms": [
+              0.054,
+              0.055,
+              0.06,
+              0.059,
+              0.057
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.119,
+            "median_ms": 0.116,
+            "std_ms": 0.005,
+            "min_ms": 0.114,
+            "max_ms": 0.127,
+            "ci_95": [
+              0.112,
+              0.125
+            ],
+            "cv": 0.0439,
+            "n_samples": 5,
+            "raw_ms": [
+              0.116,
+              0.127,
+              0.121,
+              0.115,
+              0.114
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.085,
+            "median_ms": 0.085,
+            "std_ms": 0.003,
+            "min_ms": 0.082,
+            "max_ms": 0.089,
+            "ci_95": [
+              0.081,
+              0.089
+            ],
+            "cv": 0.0381,
+            "n_samples": 5,
+            "raw_ms": [
+              0.085,
+              0.089,
+              0.086,
+              0.082,
+              0.082
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.09,
+            "median_ms": 0.089,
+            "std_ms": 0.003,
+            "min_ms": 0.087,
+            "max_ms": 0.094,
+            "ci_95": [
+              0.086,
+              0.093
+            ],
+            "cv": 0.0329,
+            "n_samples": 5,
+            "raw_ms": [
+              0.087,
+              0.094,
+              0.089,
+              0.087,
+              0.091
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.083
+        }
+      }
+    },
+    {
+      "problem": "sparse_matmul (n=500)",
+      "category": "A: Arithmetic",
+      "size_label": "medium",
+      "dominant_ops": [
+        "sparse_const",
+        "mul",
+        "sum_entries"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.055,
+            "median_ms": 0.055,
+            "std_ms": 0.002,
+            "min_ms": 0.053,
+            "max_ms": 0.059,
+            "ci_95": [
+              0.052,
+              0.058
+            ],
+            "cv": 0.0395,
+            "n_samples": 5,
+            "raw_ms": [
+              0.055,
+              0.055,
+              0.054,
+              0.053,
+              0.059
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.115,
+            "median_ms": 0.113,
+            "std_ms": 0.004,
+            "min_ms": 0.111,
+            "max_ms": 0.12,
+            "ci_95": [
+              0.11,
+              0.12
+            ],
+            "cv": 0.0361,
+            "n_samples": 5,
+            "raw_ms": [
+              0.12,
+              0.112,
+              0.113,
+              0.111,
+              0.118
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.089,
+            "median_ms": 0.087,
+            "std_ms": 0.008,
+            "min_ms": 0.081,
+            "max_ms": 0.102,
+            "ci_95": [
+              0.079,
+              0.099
+            ],
+            "cv": 0.0897,
+            "n_samples": 5,
+            "raw_ms": [
+              0.087,
+              0.089,
+              0.081,
+              0.102,
+              0.086
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.087,
+            "median_ms": 0.089,
+            "std_ms": 0.005,
+            "min_ms": 0.081,
+            "max_ms": 0.093,
+            "ci_95": [
+              0.081,
+              0.094
+            ],
+            "cv": 0.0579,
+            "n_samples": 5,
+            "raw_ms": [
+              0.089,
+              0.084,
+              0.081,
+              0.093,
+              0.091
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.08
+        }
+      }
+    },
+    {
+      "problem": "sparse_matmul (n=2000)",
+      "category": "A: Arithmetic",
+      "size_label": "large",
+      "dominant_ops": [
+        "sparse_const",
+        "mul",
+        "sum_entries"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.062,
+            "median_ms": 0.059,
+            "std_ms": 0.007,
+            "min_ms": 0.055,
+            "max_ms": 0.072,
+            "ci_95": [
+              0.053,
+              0.071
+            ],
+            "cv": 0.1184,
+            "n_samples": 5,
+            "raw_ms": [
+              0.055,
+              0.072,
+              0.067,
+              0.056,
+              0.059
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.122,
+            "median_ms": 0.122,
+            "std_ms": 0.002,
+            "min_ms": 0.121,
+            "max_ms": 0.126,
+            "ci_95": [
+              0.12,
+              0.125
+            ],
+            "cv": 0.0163,
+            "n_samples": 5,
+            "raw_ms": [
+              0.121,
+              0.126,
+              0.122,
+              0.121,
+              0.123
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.086,
+            "median_ms": 0.088,
+            "std_ms": 0.005,
+            "min_ms": 0.08,
+            "max_ms": 0.093,
+            "ci_95": [
+              0.079,
+              0.093
+            ],
+            "cv": 0.0635,
+            "n_samples": 5,
+            "raw_ms": [
+              0.089,
+              0.093,
+              0.081,
+              0.088,
+              0.08
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.086,
+            "median_ms": 0.086,
+            "std_ms": 0.004,
+            "min_ms": 0.082,
+            "max_ms": 0.092,
+            "ci_95": [
+              0.082,
+              0.091
+            ],
+            "cv": 0.0414,
+            "n_samples": 5,
+            "raw_ms": [
+              0.086,
+              0.092,
+              0.085,
+              0.087,
+              0.082
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.982
+        }
+      }
+    },
+    {
+      "problem": "dense_qp (n=50)",
+      "category": "A: Arithmetic",
+      "size_label": "small",
+      "dominant_ops": [
+        "mul",
+        "rmul",
+        "quad_form"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.072,
+            "median_ms": 0.069,
+            "std_ms": 0.008,
+            "min_ms": 0.064,
+            "max_ms": 0.084,
+            "ci_95": [
+              0.062,
+              0.082
+            ],
+            "cv": 0.115,
+            "n_samples": 5,
+            "raw_ms": [
+              0.084,
+              0.076,
+              0.069,
+              0.066,
+              0.064
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.362,
+            "median_ms": 0.353,
+            "std_ms": 0.024,
+            "min_ms": 0.342,
+            "max_ms": 0.403,
+            "ci_95": [
+              0.332,
+              0.392
+            ],
+            "cv": 0.0674,
+            "n_samples": 5,
+            "raw_ms": [
+              0.365,
+              0.353,
+              0.347,
+              0.342,
+              0.403
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.132,
+            "median_ms": 0.126,
+            "std_ms": 0.014,
+            "min_ms": 0.117,
+            "max_ms": 0.148,
+            "ci_95": [
+              0.115,
+              0.15
+            ],
+            "cv": 0.1064,
+            "n_samples": 5,
+            "raw_ms": [
+              0.148,
+              0.124,
+              0.117,
+              0.147,
+              0.126
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.364,
+            "median_ms": 0.365,
+            "std_ms": 0.009,
+            "min_ms": 0.352,
+            "max_ms": 0.376,
+            "ci_95": [
+              0.353,
+              0.376
+            ],
+            "cv": 0.0257,
+            "n_samples": 5,
+            "raw_ms": [
+              0.376,
+              0.358,
+              0.352,
+              0.369,
+              0.365
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 5.038
+        }
+      }
+    },
+    {
+      "problem": "dense_qp (n=200)",
+      "category": "A: Arithmetic",
+      "size_label": "medium",
+      "dominant_ops": [
+        "mul",
+        "rmul",
+        "quad_form"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.076,
+            "median_ms": 0.079,
+            "std_ms": 0.005,
+            "min_ms": 0.069,
+            "max_ms": 0.081,
+            "ci_95": [
+              0.07,
+              0.083
+            ],
+            "cv": 0.0672,
+            "n_samples": 5,
+            "raw_ms": [
+              0.079,
+              0.08,
+              0.073,
+              0.069,
+              0.081
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.357,
+            "median_ms": 0.353,
+            "std_ms": 0.011,
+            "min_ms": 0.35,
+            "max_ms": 0.376,
+            "ci_95": [
+              0.344,
+              0.37
+            ],
+            "cv": 0.0295,
+            "n_samples": 5,
+            "raw_ms": [
+              0.376,
+              0.356,
+              0.351,
+              0.353,
+              0.35
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.157,
+            "median_ms": 0.146,
+            "std_ms": 0.03,
+            "min_ms": 0.131,
+            "max_ms": 0.208,
+            "ci_95": [
+              0.12,
+              0.195
+            ],
+            "cv": 0.1915,
+            "n_samples": 5,
+            "raw_ms": [
+              0.141,
+              0.131,
+              0.208,
+              0.159,
+              0.146
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.385,
+            "median_ms": 0.379,
+            "std_ms": 0.022,
+            "min_ms": 0.368,
+            "max_ms": 0.421,
+            "ci_95": [
+              0.358,
+              0.412
+            ],
+            "cv": 0.0561,
+            "n_samples": 5,
+            "raw_ms": [
+              0.421,
+              0.388,
+              0.368,
+              0.37,
+              0.379
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 4.674
+        }
+      }
+    },
+    {
+      "problem": "dense_qp (n=500)",
+      "category": "A: Arithmetic",
+      "size_label": "large",
+      "dominant_ops": [
+        "mul",
+        "rmul",
+        "quad_form"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.077,
+            "median_ms": 0.075,
+            "std_ms": 0.005,
+            "min_ms": 0.072,
+            "max_ms": 0.083,
+            "ci_95": [
+              0.07,
+              0.083
+            ],
+            "cv": 0.0641,
+            "n_samples": 5,
+            "raw_ms": [
+              0.072,
+              0.073,
+              0.083,
+              0.08,
+              0.075
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.392,
+            "median_ms": 0.386,
+            "std_ms": 0.024,
+            "min_ms": 0.373,
+            "max_ms": 0.434,
+            "ci_95": [
+              0.362,
+              0.422
+            ],
+            "cv": 0.0617,
+            "n_samples": 5,
+            "raw_ms": [
+              0.387,
+              0.434,
+              0.386,
+              0.38,
+              0.373
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.15,
+            "median_ms": 0.152,
+            "std_ms": 0.007,
+            "min_ms": 0.141,
+            "max_ms": 0.157,
+            "ci_95": [
+              0.142,
+              0.158
+            ],
+            "cv": 0.0444,
+            "n_samples": 5,
+            "raw_ms": [
+              0.155,
+              0.157,
+              0.152,
+              0.146,
+              0.141
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.396,
+            "median_ms": 0.387,
+            "std_ms": 0.022,
+            "min_ms": 0.377,
+            "max_ms": 0.433,
+            "ci_95": [
+              0.368,
+              0.423
+            ],
+            "cv": 0.056,
+            "n_samples": 5,
+            "raw_ms": [
+              0.398,
+              0.433,
+              0.387,
+              0.383,
+              0.377
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 5.118
+        }
+      }
+    },
+    {
+      "problem": "many_constraints (m=10)",
+      "category": "B: Constraints",
+      "size_label": "small",
+      "dominant_ops": [
+        "mul",
+        "constraint_stacking"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.156,
+            "median_ms": 0.153,
+            "std_ms": 0.007,
+            "min_ms": 0.148,
+            "max_ms": 0.166,
+            "ci_95": [
+              0.147,
+              0.164
+            ],
+            "cv": 0.0423,
+            "n_samples": 5,
+            "raw_ms": [
+              0.158,
+              0.153,
+              0.153,
+              0.166,
+              0.148
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 2.258,
+            "median_ms": 2.263,
+            "std_ms": 0.029,
+            "min_ms": 2.225,
+            "max_ms": 2.298,
+            "ci_95": [
+              2.223,
+              2.294
+            ],
+            "cv": 0.0127,
+            "n_samples": 5,
+            "raw_ms": [
+              2.298,
+              2.269,
+              2.237,
+              2.225,
+              2.263
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.31,
+            "median_ms": 0.306,
+            "std_ms": 0.013,
+            "min_ms": 0.297,
+            "max_ms": 0.328,
+            "ci_95": [
+              0.295,
+              0.326
+            ],
+            "cv": 0.0407,
+            "n_samples": 5,
+            "raw_ms": [
+              0.328,
+              0.318,
+              0.302,
+              0.306,
+              0.297
+            ]
+          },
+          "COO": {
+            "mean_ms": 1.509,
+            "median_ms": 1.498,
+            "std_ms": 0.037,
+            "min_ms": 1.476,
+            "max_ms": 1.573,
+            "ci_95": [
+              1.463,
+              1.555
+            ],
+            "cv": 0.0245,
+            "n_samples": 5,
+            "raw_ms": [
+              1.501,
+              1.496,
+              1.476,
+              1.498,
+              1.573
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 14.519
+        }
+      }
+    },
+    {
+      "problem": "many_constraints (m=50)",
+      "category": "B: Constraints",
+      "size_label": "small",
+      "dominant_ops": [
+        "mul",
+        "constraint_stacking"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.325,
+            "median_ms": 0.32,
+            "std_ms": 0.009,
+            "min_ms": 0.316,
+            "max_ms": 0.338,
+            "ci_95": [
+              0.313,
+              0.337
+            ],
+            "cv": 0.0289,
+            "n_samples": 5,
+            "raw_ms": [
+              0.333,
+              0.338,
+              0.32,
+              0.32,
+              0.316
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 11.116,
+            "median_ms": 11.118,
+            "std_ms": 0.073,
+            "min_ms": 11.013,
+            "max_ms": 11.206,
+            "ci_95": [
+              11.025,
+              11.206
+            ],
+            "cv": 0.0065,
+            "n_samples": 5,
+            "raw_ms": [
+              11.206,
+              11.085,
+              11.155,
+              11.013,
+              11.118
+            ]
+          },
+          "CPP": {
+            "mean_ms": 1.174,
+            "median_ms": 1.173,
+            "std_ms": 0.011,
+            "min_ms": 1.163,
+            "max_ms": 1.19,
+            "ci_95": [
+              1.16,
+              1.188
+            ],
+            "cv": 0.0094,
+            "n_samples": 5,
+            "raw_ms": [
+              1.19,
+              1.173,
+              1.166,
+              1.18,
+              1.163
+            ]
+          },
+          "COO": {
+            "mean_ms": 7.071,
+            "median_ms": 7.048,
+            "std_ms": 0.078,
+            "min_ms": 6.998,
+            "max_ms": 7.175,
+            "ci_95": [
+              6.974,
+              7.168
+            ],
+            "cv": 0.0111,
+            "n_samples": 5,
+            "raw_ms": [
+              7.175,
+              7.048,
+              6.998,
+              7.13,
+              7.006
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 34.189
+        }
+      }
+    },
+    {
+      "problem": "many_constraints (m=100)",
+      "category": "B: Constraints",
+      "size_label": "medium",
+      "dominant_ops": [
+        "mul",
+        "constraint_stacking"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.547,
+            "median_ms": 0.546,
+            "std_ms": 0.002,
+            "min_ms": 0.545,
+            "max_ms": 0.55,
+            "ci_95": [
+              0.545,
+              0.55
+            ],
+            "cv": 0.0038,
+            "n_samples": 5,
+            "raw_ms": [
+              0.548,
+              0.545,
+              0.546,
+              0.55,
+              0.546
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 21.426,
+            "median_ms": 21.438,
+            "std_ms": 0.1,
+            "min_ms": 21.287,
+            "max_ms": 21.542,
+            "ci_95": [
+              21.302,
+              21.55
+            ],
+            "cv": 0.0047,
+            "n_samples": 5,
+            "raw_ms": [
+              21.372,
+              21.287,
+              21.542,
+              21.438,
+              21.49
+            ]
+          },
+          "CPP": {
+            "mean_ms": 2.312,
+            "median_ms": 2.322,
+            "std_ms": 0.041,
+            "min_ms": 2.253,
+            "max_ms": 2.361,
+            "ci_95": [
+              2.261,
+              2.362
+            ],
+            "cv": 0.0176,
+            "n_samples": 5,
+            "raw_ms": [
+              2.322,
+              2.361,
+              2.328,
+              2.294,
+              2.253
+            ]
+          },
+          "COO": {
+            "mean_ms": 13.761,
+            "median_ms": 13.769,
+            "std_ms": 0.054,
+            "min_ms": 13.688,
+            "max_ms": 13.829,
+            "ci_95": [
+              13.694,
+              13.828
+            ],
+            "cv": 0.0039,
+            "n_samples": 5,
+            "raw_ms": [
+              13.829,
+              13.789,
+              13.732,
+              13.688,
+              13.769
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 39.148
+        }
+      }
+    },
+    {
+      "problem": "many_constraints (m=500)",
+      "category": "B: Constraints",
+      "size_label": "medium",
+      "dominant_ops": [
+        "mul",
+        "constraint_stacking"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 2.346,
+            "median_ms": 2.35,
+            "std_ms": 0.03,
+            "min_ms": 2.309,
+            "max_ms": 2.383,
+            "ci_95": [
+              2.309,
+              2.383
+            ],
+            "cv": 0.0128,
+            "n_samples": 5,
+            "raw_ms": [
+              2.309,
+              2.324,
+              2.364,
+              2.35,
+              2.383
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 110.477,
+            "median_ms": 109.876,
+            "std_ms": 1.069,
+            "min_ms": 109.704,
+            "max_ms": 112.169,
+            "ci_95": [
+              109.15,
+              111.804
+            ],
+            "cv": 0.0097,
+            "n_samples": 5,
+            "raw_ms": [
+              109.876,
+              109.728,
+              110.907,
+              109.704,
+              112.169
+            ]
+          },
+          "CPP": {
+            "mean_ms": 14.491,
+            "median_ms": 14.526,
+            "std_ms": 0.128,
+            "min_ms": 14.339,
+            "max_ms": 14.659,
+            "ci_95": [
+              14.332,
+              14.651
+            ],
+            "cv": 0.0089,
+            "n_samples": 5,
+            "raw_ms": [
+              14.339,
+              14.526,
+              14.659,
+              14.388,
+              14.545
+            ]
+          },
+          "COO": {
+            "mean_ms": 69.873,
+            "median_ms": 69.848,
+            "std_ms": 0.101,
+            "min_ms": 69.747,
+            "max_ms": 70.016,
+            "ci_95": [
+              69.748,
+              69.998
+            ],
+            "cv": 0.0014,
+            "n_samples": 5,
+            "raw_ms": [
+              69.747,
+              69.848,
+              70.016,
+              69.922,
+              69.833
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 47.092
+        }
+      }
+    },
+    {
+      "problem": "many_constraints (m=1000)",
+      "category": "B: Constraints",
+      "size_label": "large",
+      "dominant_ops": [
+        "mul",
+        "constraint_stacking"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 4.856,
+            "median_ms": 4.856,
+            "std_ms": 0.03,
+            "min_ms": 4.816,
+            "max_ms": 4.898,
+            "ci_95": [
+              4.819,
+              4.892
+            ],
+            "cv": 0.0061,
+            "n_samples": 5,
+            "raw_ms": [
+              4.898,
+              4.856,
+              4.816,
+              4.861,
+              4.847
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 215.462,
+            "median_ms": 215.478,
+            "std_ms": 0.501,
+            "min_ms": 214.732,
+            "max_ms": 216.106,
+            "ci_95": [
+              214.84,
+              216.083
+            ],
+            "cv": 0.0023,
+            "n_samples": 5,
+            "raw_ms": [
+              214.732,
+              215.478,
+              216.106,
+              215.334,
+              215.659
+            ]
+          },
+          "CPP": {
+            "mean_ms": 33.511,
+            "median_ms": 33.452,
+            "std_ms": 0.212,
+            "min_ms": 33.258,
+            "max_ms": 33.802,
+            "ci_95": [
+              33.248,
+              33.774
+            ],
+            "cv": 0.0063,
+            "n_samples": 5,
+            "raw_ms": [
+              33.802,
+              33.452,
+              33.638,
+              33.258,
+              33.405
+            ]
+          },
+          "COO": {
+            "mean_ms": 137.796,
+            "median_ms": 137.709,
+            "std_ms": 0.281,
+            "min_ms": 137.58,
+            "max_ms": 138.289,
+            "ci_95": [
+              137.447,
+              138.144
+            ],
+            "cv": 0.002,
+            "n_samples": 5,
+            "raw_ms": [
+              137.689,
+              138.289,
+              137.58,
+              137.712,
+              137.709
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 44.373
+        }
+      }
+    },
+    {
+      "problem": "many_constraints (m=5000)",
+      "category": "B: Constraints",
+      "size_label": "large",
+      "dominant_ops": [
+        "mul",
+        "constraint_stacking"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 24.305,
+            "median_ms": 24.29,
+            "std_ms": 0.166,
+            "min_ms": 24.125,
+            "max_ms": 24.499,
+            "ci_95": [
+              24.098,
+              24.511
+            ],
+            "cv": 0.0068,
+            "n_samples": 5,
+            "raw_ms": [
+              24.499,
+              24.447,
+              24.125,
+              24.162,
+              24.29
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 1079.27,
+            "median_ms": 1079.315,
+            "std_ms": 5.743,
+            "min_ms": 1072.23,
+            "max_ms": 1087.008,
+            "ci_95": [
+              1072.139,
+              1086.402
+            ],
+            "cv": 0.0053,
+            "n_samples": 5,
+            "raw_ms": [
+              1072.23,
+              1082.234,
+              1087.008,
+              1075.565,
+              1079.315
+            ]
+          },
+          "CPP": {
+            "mean_ms": 372.583,
+            "median_ms": 372.728,
+            "std_ms": 0.765,
+            "min_ms": 371.493,
+            "max_ms": 373.4,
+            "ci_95": [
+              371.633,
+              373.533
+            ],
+            "cv": 0.0021,
+            "n_samples": 5,
+            "raw_ms": [
+              371.493,
+              373.125,
+              372.169,
+              373.4,
+              372.728
+            ]
+          },
+          "COO": {
+            "mean_ms": 698.946,
+            "median_ms": 698.821,
+            "std_ms": 1.456,
+            "min_ms": 697.286,
+            "max_ms": 701.264,
+            "ci_95": [
+              697.138,
+              700.754
+            ],
+            "cv": 0.0021,
+            "n_samples": 5,
+            "raw_ms": [
+              701.264,
+              698.821,
+              697.286,
+              698.987,
+              698.37
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 44.406
+        }
+      }
+    },
+    {
+      "problem": "box_constraints (n=50)",
+      "category": "B: Constraints",
+      "size_label": "small",
+      "dominant_ops": [
+        "index",
+        "variable"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.07,
+            "median_ms": 0.071,
+            "std_ms": 0.002,
+            "min_ms": 0.066,
+            "max_ms": 0.072,
+            "ci_95": [
+              0.067,
+              0.073
+            ],
+            "cv": 0.0338,
+            "n_samples": 5,
+            "raw_ms": [
+              0.072,
+              0.069,
+              0.071,
+              0.066,
+              0.071
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.294,
+            "median_ms": 0.294,
+            "std_ms": 0.011,
+            "min_ms": 0.284,
+            "max_ms": 0.309,
+            "ci_95": [
+              0.281,
+              0.308
+            ],
+            "cv": 0.0372,
+            "n_samples": 5,
+            "raw_ms": [
+              0.309,
+              0.294,
+              0.284,
+              0.284,
+              0.3
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.122,
+            "median_ms": 0.122,
+            "std_ms": 0.006,
+            "min_ms": 0.117,
+            "max_ms": 0.132,
+            "ci_95": [
+              0.115,
+              0.13
+            ],
+            "cv": 0.0477,
+            "n_samples": 5,
+            "raw_ms": [
+              0.132,
+              0.123,
+              0.118,
+              0.117,
+              0.122
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.139,
+            "median_ms": 0.136,
+            "std_ms": 0.005,
+            "min_ms": 0.134,
+            "max_ms": 0.145,
+            "ci_95": [
+              0.133,
+              0.145
+            ],
+            "cv": 0.0364,
+            "n_samples": 5,
+            "raw_ms": [
+              0.144,
+              0.136,
+              0.136,
+              0.134,
+              0.145
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 4.23
+        }
+      }
+    },
+    {
+      "problem": "box_constraints (n=200)",
+      "category": "B: Constraints",
+      "size_label": "medium",
+      "dominant_ops": [
+        "index",
+        "variable"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.085,
+            "median_ms": 0.085,
+            "std_ms": 0.005,
+            "min_ms": 0.08,
+            "max_ms": 0.091,
+            "ci_95": [
+              0.079,
+              0.09
+            ],
+            "cv": 0.0548,
+            "n_samples": 5,
+            "raw_ms": [
+              0.081,
+              0.08,
+              0.091,
+              0.086,
+              0.085
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.316,
+            "median_ms": 0.317,
+            "std_ms": 0.005,
+            "min_ms": 0.307,
+            "max_ms": 0.321,
+            "ci_95": [
+              0.309,
+              0.322
+            ],
+            "cv": 0.0172,
+            "n_samples": 5,
+            "raw_ms": [
+              0.32,
+              0.307,
+              0.321,
+              0.317,
+              0.313
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.151,
+            "median_ms": 0.151,
+            "std_ms": 0.006,
+            "min_ms": 0.143,
+            "max_ms": 0.159,
+            "ci_95": [
+              0.144,
+              0.158
+            ],
+            "cv": 0.0371,
+            "n_samples": 5,
+            "raw_ms": [
+              0.159,
+              0.152,
+              0.151,
+              0.15,
+              0.143
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.163,
+            "median_ms": 0.161,
+            "std_ms": 0.011,
+            "min_ms": 0.153,
+            "max_ms": 0.181,
+            "ci_95": [
+              0.149,
+              0.176
+            ],
+            "cv": 0.0674,
+            "n_samples": 5,
+            "raw_ms": [
+              0.162,
+              0.181,
+              0.161,
+              0.153,
+              0.157
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 3.726
+        }
+      }
+    },
+    {
+      "problem": "box_constraints (n=1000)",
+      "category": "B: Constraints",
+      "size_label": "large",
+      "dominant_ops": [
+        "index",
+        "variable"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.148,
+            "median_ms": 0.148,
+            "std_ms": 0.004,
+            "min_ms": 0.142,
+            "max_ms": 0.152,
+            "ci_95": [
+              0.143,
+              0.153
+            ],
+            "cv": 0.0273,
+            "n_samples": 5,
+            "raw_ms": [
+              0.152,
+              0.146,
+              0.148,
+              0.151,
+              0.142
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.434,
+            "median_ms": 0.431,
+            "std_ms": 0.011,
+            "min_ms": 0.427,
+            "max_ms": 0.453,
+            "ci_95": [
+              0.421,
+              0.448
+            ],
+            "cv": 0.0249,
+            "n_samples": 5,
+            "raw_ms": [
+              0.453,
+              0.431,
+              0.433,
+              0.427,
+              0.427
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.305,
+            "median_ms": 0.301,
+            "std_ms": 0.013,
+            "min_ms": 0.291,
+            "max_ms": 0.324,
+            "ci_95": [
+              0.289,
+              0.322
+            ],
+            "cv": 0.0433,
+            "n_samples": 5,
+            "raw_ms": [
+              0.301,
+              0.324,
+              0.297,
+              0.291,
+              0.312
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.273,
+            "median_ms": 0.274,
+            "std_ms": 0.012,
+            "min_ms": 0.261,
+            "max_ms": 0.288,
+            "ci_95": [
+              0.258,
+              0.288
+            ],
+            "cv": 0.0432,
+            "n_samples": 5,
+            "raw_ms": [
+              0.288,
+              0.28,
+              0.262,
+              0.261,
+              0.274
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.941
+        }
+      }
+    },
+    {
+      "problem": "matrix_indexing (n=20)",
+      "category": "C: Structural",
+      "size_label": "small",
+      "dominant_ops": [
+        "index",
+        "reshape"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.056,
+            "median_ms": 0.055,
+            "std_ms": 0.003,
+            "min_ms": 0.054,
+            "max_ms": 0.06,
+            "ci_95": [
+              0.053,
+              0.06
+            ],
+            "cv": 0.0472,
+            "n_samples": 5,
+            "raw_ms": [
+              0.055,
+              0.055,
+              0.06,
+              0.054,
+              0.059
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.119,
+            "median_ms": 0.118,
+            "std_ms": 0.004,
+            "min_ms": 0.115,
+            "max_ms": 0.125,
+            "ci_95": [
+              0.114,
+              0.124
+            ],
+            "cv": 0.0331,
+            "n_samples": 5,
+            "raw_ms": [
+              0.118,
+              0.115,
+              0.121,
+              0.125,
+              0.116
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.084,
+            "median_ms": 0.083,
+            "std_ms": 0.005,
+            "min_ms": 0.078,
+            "max_ms": 0.091,
+            "ci_95": [
+              0.078,
+              0.09
+            ],
+            "cv": 0.0582,
+            "n_samples": 5,
+            "raw_ms": [
+              0.086,
+              0.091,
+              0.083,
+              0.081,
+              0.078
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.086,
+            "median_ms": 0.086,
+            "std_ms": 0.004,
+            "min_ms": 0.081,
+            "max_ms": 0.093,
+            "ci_95": [
+              0.081,
+              0.091
+            ],
+            "cv": 0.0511,
+            "n_samples": 5,
+            "raw_ms": [
+              0.087,
+              0.086,
+              0.093,
+              0.083,
+              0.081
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.11
+        }
+      }
+    },
+    {
+      "problem": "matrix_indexing (n=50)",
+      "category": "C: Structural",
+      "size_label": "medium",
+      "dominant_ops": [
+        "index",
+        "reshape"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.057,
+            "median_ms": 0.057,
+            "std_ms": 0.003,
+            "min_ms": 0.053,
+            "max_ms": 0.061,
+            "ci_95": [
+              0.053,
+              0.061
+            ],
+            "cv": 0.0592,
+            "n_samples": 5,
+            "raw_ms": [
+              0.06,
+              0.061,
+              0.055,
+              0.057,
+              0.053
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.114,
+            "median_ms": 0.112,
+            "std_ms": 0.005,
+            "min_ms": 0.11,
+            "max_ms": 0.122,
+            "ci_95": [
+              0.108,
+              0.12
+            ],
+            "cv": 0.0419,
+            "n_samples": 5,
+            "raw_ms": [
+              0.122,
+              0.112,
+              0.111,
+              0.114,
+              0.11
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.081,
+            "median_ms": 0.08,
+            "std_ms": 0.004,
+            "min_ms": 0.076,
+            "max_ms": 0.086,
+            "ci_95": [
+              0.076,
+              0.086
+            ],
+            "cv": 0.0483,
+            "n_samples": 5,
+            "raw_ms": [
+              0.086,
+              0.08,
+              0.08,
+              0.082,
+              0.076
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.086,
+            "median_ms": 0.087,
+            "std_ms": 0.005,
+            "min_ms": 0.081,
+            "max_ms": 0.094,
+            "ci_95": [
+              0.08,
+              0.093
+            ],
+            "cv": 0.0599,
+            "n_samples": 5,
+            "raw_ms": [
+              0.094,
+              0.087,
+              0.087,
+              0.082,
+              0.081
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.987
+        }
+      }
+    },
+    {
+      "problem": "matrix_indexing (n=100)",
+      "category": "C: Structural",
+      "size_label": "large",
+      "dominant_ops": [
+        "index",
+        "reshape"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.056,
+            "median_ms": 0.057,
+            "std_ms": 0.003,
+            "min_ms": 0.052,
+            "max_ms": 0.059,
+            "ci_95": [
+              0.052,
+              0.06
+            ],
+            "cv": 0.0558,
+            "n_samples": 5,
+            "raw_ms": [
+              0.058,
+              0.052,
+              0.053,
+              0.059,
+              0.057
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.118,
+            "median_ms": 0.119,
+            "std_ms": 0.003,
+            "min_ms": 0.113,
+            "max_ms": 0.121,
+            "ci_95": [
+              0.114,
+              0.122
+            ],
+            "cv": 0.0255,
+            "n_samples": 5,
+            "raw_ms": [
+              0.119,
+              0.121,
+              0.113,
+              0.117,
+              0.119
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.083,
+            "median_ms": 0.083,
+            "std_ms": 0.001,
+            "min_ms": 0.081,
+            "max_ms": 0.084,
+            "ci_95": [
+              0.081,
+              0.084
+            ],
+            "cv": 0.0139,
+            "n_samples": 5,
+            "raw_ms": [
+              0.082,
+              0.081,
+              0.083,
+              0.084,
+              0.083
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.085,
+            "median_ms": 0.084,
+            "std_ms": 0.003,
+            "min_ms": 0.081,
+            "max_ms": 0.089,
+            "ci_95": [
+              0.081,
+              0.089
+            ],
+            "cv": 0.0373,
+            "n_samples": 5,
+            "raw_ms": [
+              0.083,
+              0.081,
+              0.084,
+              0.089,
+              0.087
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.111
+        }
+      }
+    },
+    {
+      "problem": "hstack (width=10)",
+      "category": "C: Structural",
+      "size_label": "small",
+      "dominant_ops": [
+        "hstack",
+        "mul"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.094,
+            "median_ms": 0.093,
+            "std_ms": 0.005,
+            "min_ms": 0.089,
+            "max_ms": 0.1,
+            "ci_95": [
+              0.088,
+              0.101
+            ],
+            "cv": 0.0576,
+            "n_samples": 5,
+            "raw_ms": [
+              0.1,
+              0.1,
+              0.093,
+              0.09,
+              0.089
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 2.045,
+            "median_ms": 2.043,
+            "std_ms": 0.027,
+            "min_ms": 2.013,
+            "max_ms": 2.072,
+            "ci_95": [
+              2.012,
+              2.078
+            ],
+            "cv": 0.013,
+            "n_samples": 5,
+            "raw_ms": [
+              2.072,
+              2.013,
+              2.043,
+              2.027,
+              2.072
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.211,
+            "median_ms": 0.209,
+            "std_ms": 0.007,
+            "min_ms": 0.204,
+            "max_ms": 0.222,
+            "ci_95": [
+              0.203,
+              0.22
+            ],
+            "cv": 0.0323,
+            "n_samples": 5,
+            "raw_ms": [
+              0.222,
+              0.208,
+              0.209,
+              0.204,
+              0.213
+            ]
+          },
+          "COO": {
+            "mean_ms": 1.369,
+            "median_ms": 1.376,
+            "std_ms": 0.025,
+            "min_ms": 1.337,
+            "max_ms": 1.394,
+            "ci_95": [
+              1.338,
+              1.401
+            ],
+            "cv": 0.0185,
+            "n_samples": 5,
+            "raw_ms": [
+              1.39,
+              1.394,
+              1.337,
+              1.349,
+              1.376
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 21.698
+        }
+      }
+    },
+    {
+      "problem": "hstack (width=50)",
+      "category": "C: Structural",
+      "size_label": "medium",
+      "dominant_ops": [
+        "hstack",
+        "mul"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.184,
+            "median_ms": 0.181,
+            "std_ms": 0.008,
+            "min_ms": 0.176,
+            "max_ms": 0.198,
+            "ci_95": [
+              0.174,
+              0.195
+            ],
+            "cv": 0.0459,
+            "n_samples": 5,
+            "raw_ms": [
+              0.181,
+              0.198,
+              0.181,
+              0.176,
+              0.185
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 9.837,
+            "median_ms": 9.839,
+            "std_ms": 0.052,
+            "min_ms": 9.765,
+            "max_ms": 9.899,
+            "ci_95": [
+              9.772,
+              9.901
+            ],
+            "cv": 0.0053,
+            "n_samples": 5,
+            "raw_ms": [
+              9.871,
+              9.839,
+              9.81,
+              9.899,
+              9.765
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.695,
+            "median_ms": 0.696,
+            "std_ms": 0.007,
+            "min_ms": 0.687,
+            "max_ms": 0.704,
+            "ci_95": [
+              0.687,
+              0.704
+            ],
+            "cv": 0.0101,
+            "n_samples": 5,
+            "raw_ms": [
+              0.7,
+              0.696,
+              0.689,
+              0.687,
+              0.704
+            ]
+          },
+          "COO": {
+            "mean_ms": 6.606,
+            "median_ms": 6.583,
+            "std_ms": 0.08,
+            "min_ms": 6.54,
+            "max_ms": 6.745,
+            "ci_95": [
+              6.507,
+              6.705
+            ],
+            "cv": 0.0121,
+            "n_samples": 5,
+            "raw_ms": [
+              6.583,
+              6.745,
+              6.591,
+              6.54,
+              6.572
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 53.443
+        }
+      }
+    },
+    {
+      "problem": "hstack (width=200)",
+      "category": "C: Structural",
+      "size_label": "large",
+      "dominant_ops": [
+        "hstack",
+        "mul"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.522,
+            "median_ms": 0.52,
+            "std_ms": 0.015,
+            "min_ms": 0.509,
+            "max_ms": 0.547,
+            "ci_95": [
+              0.503,
+              0.541
+            ],
+            "cv": 0.0291,
+            "n_samples": 5,
+            "raw_ms": [
+              0.522,
+              0.511,
+              0.547,
+              0.52,
+              0.509
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 39.243,
+            "median_ms": 39.296,
+            "std_ms": 0.108,
+            "min_ms": 39.092,
+            "max_ms": 39.337,
+            "ci_95": [
+              39.109,
+              39.377
+            ],
+            "cv": 0.0028,
+            "n_samples": 5,
+            "raw_ms": [
+              39.337,
+              39.165,
+              39.092,
+              39.296,
+              39.322
+            ]
+          },
+          "CPP": {
+            "mean_ms": 3.839,
+            "median_ms": 3.831,
+            "std_ms": 0.03,
+            "min_ms": 3.799,
+            "max_ms": 3.879,
+            "ci_95": [
+              3.801,
+              3.877
+            ],
+            "cv": 0.0079,
+            "n_samples": 5,
+            "raw_ms": [
+              3.856,
+              3.879,
+              3.799,
+              3.83,
+              3.831
+            ]
+          },
+          "COO": {
+            "mean_ms": 26.209,
+            "median_ms": 26.234,
+            "std_ms": 0.058,
+            "min_ms": 26.146,
+            "max_ms": 26.261,
+            "ci_95": [
+              26.137,
+              26.281
+            ],
+            "cv": 0.0022,
+            "n_samples": 5,
+            "raw_ms": [
+              26.258,
+              26.234,
+              26.261,
+              26.147,
+              26.146
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 75.173
+        }
+      }
+    },
+    {
+      "problem": "portfolio (n=50)",
+      "category": "C: Structural",
+      "size_label": "small",
+      "dominant_ops": [
+        "mul",
+        "sum",
+        "quad_form"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.073,
+            "median_ms": 0.073,
+            "std_ms": 0.003,
+            "min_ms": 0.069,
+            "max_ms": 0.076,
+            "ci_95": [
+              0.07,
+              0.076
+            ],
+            "cv": 0.0366,
+            "n_samples": 5,
+            "raw_ms": [
+              0.073,
+              0.069,
+              0.076,
+              0.075,
+              0.073
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.312,
+            "median_ms": 0.314,
+            "std_ms": 0.005,
+            "min_ms": 0.306,
+            "max_ms": 0.317,
+            "ci_95": [
+              0.306,
+              0.319
+            ],
+            "cv": 0.0172,
+            "n_samples": 5,
+            "raw_ms": [
+              0.317,
+              0.306,
+              0.314,
+              0.317,
+              0.307
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.121,
+            "median_ms": 0.122,
+            "std_ms": 0.005,
+            "min_ms": 0.116,
+            "max_ms": 0.126,
+            "ci_95": [
+              0.115,
+              0.127
+            ],
+            "cv": 0.0404,
+            "n_samples": 5,
+            "raw_ms": [
+              0.122,
+              0.117,
+              0.125,
+              0.126,
+              0.116
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.136,
+            "median_ms": 0.136,
+            "std_ms": 0.002,
+            "min_ms": 0.134,
+            "max_ms": 0.137,
+            "ci_95": [
+              0.134,
+              0.138
+            ],
+            "cv": 0.0113,
+            "n_samples": 5,
+            "raw_ms": [
+              0.137,
+              0.134,
+              0.137,
+              0.134,
+              0.136
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 4.278
+        }
+      }
+    },
+    {
+      "problem": "portfolio (n=200)",
+      "category": "C: Structural",
+      "size_label": "medium",
+      "dominant_ops": [
+        "mul",
+        "sum",
+        "quad_form"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.076,
+            "median_ms": 0.075,
+            "std_ms": 0.004,
+            "min_ms": 0.073,
+            "max_ms": 0.083,
+            "ci_95": [
+              0.071,
+              0.081
+            ],
+            "cv": 0.0542,
+            "n_samples": 5,
+            "raw_ms": [
+              0.083,
+              0.075,
+              0.077,
+              0.074,
+              0.073
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.329,
+            "median_ms": 0.327,
+            "std_ms": 0.007,
+            "min_ms": 0.32,
+            "max_ms": 0.339,
+            "ci_95": [
+              0.32,
+              0.338
+            ],
+            "cv": 0.022,
+            "n_samples": 5,
+            "raw_ms": [
+              0.339,
+              0.333,
+              0.32,
+              0.325,
+              0.327
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.14,
+            "median_ms": 0.136,
+            "std_ms": 0.008,
+            "min_ms": 0.134,
+            "max_ms": 0.154,
+            "ci_95": [
+              0.13,
+              0.151
+            ],
+            "cv": 0.0595,
+            "n_samples": 5,
+            "raw_ms": [
+              0.154,
+              0.135,
+              0.136,
+              0.134,
+              0.142
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.159,
+            "median_ms": 0.153,
+            "std_ms": 0.011,
+            "min_ms": 0.148,
+            "max_ms": 0.176,
+            "ci_95": [
+              0.144,
+              0.173
+            ],
+            "cv": 0.0721,
+            "n_samples": 5,
+            "raw_ms": [
+              0.165,
+              0.153,
+              0.148,
+              0.176,
+              0.151
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 4.308
+        }
+      }
+    },
+    {
+      "problem": "portfolio (n=500)",
+      "category": "C: Structural",
+      "size_label": "large",
+      "dominant_ops": [
+        "mul",
+        "sum",
+        "quad_form"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.092,
+            "median_ms": 0.092,
+            "std_ms": 0.003,
+            "min_ms": 0.088,
+            "max_ms": 0.096,
+            "ci_95": [
+              0.087,
+              0.096
+            ],
+            "cv": 0.0371,
+            "n_samples": 5,
+            "raw_ms": [
+              0.092,
+              0.088,
+              0.088,
+              0.094,
+              0.096
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.367,
+            "median_ms": 0.366,
+            "std_ms": 0.015,
+            "min_ms": 0.351,
+            "max_ms": 0.392,
+            "ci_95": [
+              0.348,
+              0.386
+            ],
+            "cv": 0.0421,
+            "n_samples": 5,
+            "raw_ms": [
+              0.368,
+              0.358,
+              0.392,
+              0.366,
+              0.351
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.173,
+            "median_ms": 0.173,
+            "std_ms": 0.004,
+            "min_ms": 0.168,
+            "max_ms": 0.177,
+            "ci_95": [
+              0.168,
+              0.177
+            ],
+            "cv": 0.0213,
+            "n_samples": 5,
+            "raw_ms": [
+              0.177,
+              0.17,
+              0.176,
+              0.173,
+              0.168
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.179,
+            "median_ms": 0.179,
+            "std_ms": 0.004,
+            "min_ms": 0.172,
+            "max_ms": 0.183,
+            "ci_95": [
+              0.173,
+              0.184
+            ],
+            "cv": 0.0233,
+            "n_samples": 5,
+            "raw_ms": [
+              0.183,
+              0.177,
+              0.182,
+              0.172,
+              0.179
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 4.006
+        }
+      }
+    },
+    {
+      "problem": "lasso (n=50)",
+      "category": "D: Specialized",
+      "size_label": "small",
+      "dominant_ops": [
+        "sum_squares",
+        "norm1",
+        "mul"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.188,
+            "median_ms": 0.187,
+            "std_ms": 0.006,
+            "min_ms": 0.181,
+            "max_ms": 0.195,
+            "ci_95": [
+              0.18,
+              0.196
+            ],
+            "cv": 0.0337,
+            "n_samples": 5,
+            "raw_ms": [
+              0.194,
+              0.195,
+              0.187,
+              0.181,
+              0.182
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.776,
+            "median_ms": 0.764,
+            "std_ms": 0.034,
+            "min_ms": 0.749,
+            "max_ms": 0.829,
+            "ci_95": [
+              0.734,
+              0.818
+            ],
+            "cv": 0.0436,
+            "n_samples": 5,
+            "raw_ms": [
+              0.79,
+              0.764,
+              0.749,
+              0.749,
+              0.829
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.396,
+            "median_ms": 0.394,
+            "std_ms": 0.007,
+            "min_ms": 0.388,
+            "max_ms": 0.407,
+            "ci_95": [
+              0.387,
+              0.405
+            ],
+            "cv": 0.0185,
+            "n_samples": 5,
+            "raw_ms": [
+              0.407,
+              0.393,
+              0.394,
+              0.399,
+              0.388
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.599,
+            "median_ms": 0.599,
+            "std_ms": 0.014,
+            "min_ms": 0.586,
+            "max_ms": 0.619,
+            "ci_95": [
+              0.582,
+              0.617
+            ],
+            "cv": 0.023,
+            "n_samples": 5,
+            "raw_ms": [
+              0.619,
+              0.599,
+              0.586,
+              0.606,
+              0.587
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 4.128
+        }
+      }
+    },
+    {
+      "problem": "lasso (n=200)",
+      "category": "D: Specialized",
+      "size_label": "medium",
+      "dominant_ops": [
+        "sum_squares",
+        "norm1",
+        "mul"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 1.759,
+            "median_ms": 1.763,
+            "std_ms": 0.016,
+            "min_ms": 1.732,
+            "max_ms": 1.773,
+            "ci_95": [
+              1.739,
+              1.78
+            ],
+            "cv": 0.0094,
+            "n_samples": 5,
+            "raw_ms": [
+              1.773,
+              1.771,
+              1.763,
+              1.732,
+              1.757
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 5.51,
+            "median_ms": 5.495,
+            "std_ms": 0.049,
+            "min_ms": 5.467,
+            "max_ms": 5.585,
+            "ci_95": [
+              5.45,
+              5.571
+            ],
+            "cv": 0.0088,
+            "n_samples": 5,
+            "raw_ms": [
+              5.474,
+              5.495,
+              5.585,
+              5.531,
+              5.467
+            ]
+          },
+          "CPP": {
+            "mean_ms": 3.886,
+            "median_ms": 3.875,
+            "std_ms": 0.038,
+            "min_ms": 3.85,
+            "max_ms": 3.947,
+            "ci_95": [
+              3.839,
+              3.933
+            ],
+            "cv": 0.0097,
+            "n_samples": 5,
+            "raw_ms": [
+              3.865,
+              3.85,
+              3.947,
+              3.875,
+              3.895
+            ]
+          },
+          "COO": {
+            "mean_ms": 5.416,
+            "median_ms": 5.411,
+            "std_ms": 0.082,
+            "min_ms": 5.312,
+            "max_ms": 5.541,
+            "ci_95": [
+              5.315,
+              5.518
+            ],
+            "cv": 0.0151,
+            "n_samples": 5,
+            "raw_ms": [
+              5.411,
+              5.421,
+              5.312,
+              5.396,
+              5.541
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 3.132
+        }
+      }
+    },
+    {
+      "problem": "lasso (n=500)",
+      "category": "D: Specialized",
+      "size_label": "large",
+      "dominant_ops": [
+        "sum_squares",
+        "norm1",
+        "mul"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 13.513,
+            "median_ms": 13.547,
+            "std_ms": 0.141,
+            "min_ms": 13.348,
+            "max_ms": 13.701,
+            "ci_95": [
+              13.338,
+              13.688
+            ],
+            "cv": 0.0104,
+            "n_samples": 5,
+            "raw_ms": [
+              13.701,
+              13.348,
+              13.4,
+              13.568,
+              13.547
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 35.262,
+            "median_ms": 35.231,
+            "std_ms": 0.072,
+            "min_ms": 35.224,
+            "max_ms": 35.39,
+            "ci_95": [
+              35.172,
+              35.351
+            ],
+            "cv": 0.002,
+            "n_samples": 5,
+            "raw_ms": [
+              35.238,
+              35.225,
+              35.231,
+              35.39,
+              35.224
+            ]
+          },
+          "CPP": {
+            "mean_ms": 25.163,
+            "median_ms": 25.232,
+            "std_ms": 0.159,
+            "min_ms": 24.891,
+            "max_ms": 25.282,
+            "ci_95": [
+              24.966,
+              25.36
+            ],
+            "cv": 0.0063,
+            "n_samples": 5,
+            "raw_ms": [
+              25.155,
+              25.254,
+              25.282,
+              24.891,
+              25.232
+            ]
+          },
+          "COO": {
+            "mean_ms": 35.869,
+            "median_ms": 35.868,
+            "std_ms": 0.055,
+            "min_ms": 35.795,
+            "max_ms": 35.927,
+            "ci_95": [
+              35.801,
+              35.937
+            ],
+            "cv": 0.0015,
+            "n_samples": 5,
+            "raw_ms": [
+              35.795,
+              35.917,
+              35.839,
+              35.927,
+              35.868
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.609
+        }
+      }
+    },
+    {
+      "problem": "lasso (n=1000)",
+      "category": "D: Specialized",
+      "size_label": "large",
+      "dominant_ops": [
+        "sum_squares",
+        "norm1",
+        "mul"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 76.984,
+            "median_ms": 77.05,
+            "std_ms": 0.332,
+            "min_ms": 76.571,
+            "max_ms": 77.453,
+            "ci_95": [
+              76.571,
+              77.396
+            ],
+            "cv": 0.0043,
+            "n_samples": 5,
+            "raw_ms": [
+              77.05,
+              77.453,
+              77.062,
+              76.571,
+              76.783
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 147.35,
+            "median_ms": 147.313,
+            "std_ms": 0.143,
+            "min_ms": 147.163,
+            "max_ms": 147.502,
+            "ci_95": [
+              147.172,
+              147.528
+            ],
+            "cv": 0.001,
+            "n_samples": 5,
+            "raw_ms": [
+              147.313,
+              147.286,
+              147.163,
+              147.487,
+              147.502
+            ]
+          },
+          "CPP": {
+            "mean_ms": 106.231,
+            "median_ms": 106.24,
+            "std_ms": 0.232,
+            "min_ms": 105.969,
+            "max_ms": 106.553,
+            "ci_95": [
+              105.942,
+              106.519
+            ],
+            "cv": 0.0022,
+            "n_samples": 5,
+            "raw_ms": [
+              106.553,
+              106.053,
+              106.339,
+              105.969,
+              106.24
+            ]
+          },
+          "COO": {
+            "mean_ms": 150.565,
+            "median_ms": 150.566,
+            "std_ms": 0.08,
+            "min_ms": 150.471,
+            "max_ms": 150.662,
+            "ci_95": [
+              150.466,
+              150.664
+            ],
+            "cv": 0.0005,
+            "n_samples": 5,
+            "raw_ms": [
+              150.662,
+              150.566,
+              150.471,
+              150.503,
+              150.624
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.914
+        }
+      }
+    },
+    {
+      "problem": "svm (m=100)",
+      "category": "D: Specialized",
+      "size_label": "small",
+      "dominant_ops": [
+        "mul",
+        "mul_elem"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.202,
+            "median_ms": 0.198,
+            "std_ms": 0.007,
+            "min_ms": 0.196,
+            "max_ms": 0.212,
+            "ci_95": [
+              0.193,
+              0.211
+            ],
+            "cv": 0.035,
+            "n_samples": 5,
+            "raw_ms": [
+              0.212,
+              0.198,
+              0.197,
+              0.196,
+              0.206
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.764,
+            "median_ms": 0.747,
+            "std_ms": 0.044,
+            "min_ms": 0.734,
+            "max_ms": 0.842,
+            "ci_95": [
+              0.709,
+              0.819
+            ],
+            "cv": 0.0581,
+            "n_samples": 5,
+            "raw_ms": [
+              0.753,
+              0.747,
+              0.734,
+              0.842,
+              0.743
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.412,
+            "median_ms": 0.413,
+            "std_ms": 0.012,
+            "min_ms": 0.398,
+            "max_ms": 0.429,
+            "ci_95": [
+              0.397,
+              0.428
+            ],
+            "cv": 0.0295,
+            "n_samples": 5,
+            "raw_ms": [
+              0.419,
+              0.398,
+              0.429,
+              0.413,
+              0.403
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.77,
+            "median_ms": 0.773,
+            "std_ms": 0.011,
+            "min_ms": 0.755,
+            "max_ms": 0.782,
+            "ci_95": [
+              0.756,
+              0.783
+            ],
+            "cv": 0.0141,
+            "n_samples": 5,
+            "raw_ms": [
+              0.782,
+              0.773,
+              0.776,
+              0.755,
+              0.763
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 3.786
+        }
+      }
+    },
+    {
+      "problem": "svm (m=500)",
+      "category": "D: Specialized",
+      "size_label": "medium",
+      "dominant_ops": [
+        "mul",
+        "mul_elem"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.731,
+            "median_ms": 0.723,
+            "std_ms": 0.026,
+            "min_ms": 0.708,
+            "max_ms": 0.775,
+            "ci_95": [
+              0.699,
+              0.763
+            ],
+            "cv": 0.0351,
+            "n_samples": 5,
+            "raw_ms": [
+              0.708,
+              0.723,
+              0.725,
+              0.775,
+              0.723
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 2.096,
+            "median_ms": 2.063,
+            "std_ms": 0.057,
+            "min_ms": 2.047,
+            "max_ms": 2.17,
+            "ci_95": [
+              2.025,
+              2.167
+            ],
+            "cv": 0.0272,
+            "n_samples": 5,
+            "raw_ms": [
+              2.063,
+              2.17,
+              2.056,
+              2.047,
+              2.145
+            ]
+          },
+          "CPP": {
+            "mean_ms": 1.498,
+            "median_ms": 1.493,
+            "std_ms": 0.045,
+            "min_ms": 1.44,
+            "max_ms": 1.566,
+            "ci_95": [
+              1.442,
+              1.554
+            ],
+            "cv": 0.0301,
+            "n_samples": 5,
+            "raw_ms": [
+              1.566,
+              1.491,
+              1.493,
+              1.499,
+              1.44
+            ]
+          },
+          "COO": {
+            "mean_ms": 2.295,
+            "median_ms": 2.268,
+            "std_ms": 0.047,
+            "min_ms": 2.252,
+            "max_ms": 2.346,
+            "ci_95": [
+              2.236,
+              2.353
+            ],
+            "cv": 0.0204,
+            "n_samples": 5,
+            "raw_ms": [
+              2.268,
+              2.345,
+              2.252,
+              2.262,
+              2.346
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.868
+        }
+      }
+    },
+    {
+      "problem": "convolution (len=100)",
+      "category": "D: Specialized",
+      "size_label": "small",
+      "dominant_ops": [
+        "conv",
+        "sum_squares"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.058,
+            "median_ms": 0.057,
+            "std_ms": 0.002,
+            "min_ms": 0.056,
+            "max_ms": 0.061,
+            "ci_95": [
+              0.055,
+              0.061
+            ],
+            "cv": 0.0409,
+            "n_samples": 5,
+            "raw_ms": [
+              0.06,
+              0.057,
+              0.056,
+              0.061,
+              0.056
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.119,
+            "median_ms": 0.121,
+            "std_ms": 0.005,
+            "min_ms": 0.113,
+            "max_ms": 0.124,
+            "ci_95": [
+              0.113,
+              0.125
+            ],
+            "cv": 0.0391,
+            "n_samples": 5,
+            "raw_ms": [
+              0.122,
+              0.121,
+              0.115,
+              0.124,
+              0.113
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.083,
+            "median_ms": 0.083,
+            "std_ms": 0.002,
+            "min_ms": 0.08,
+            "max_ms": 0.086,
+            "ci_95": [
+              0.08,
+              0.086
+            ],
+            "cv": 0.0297,
+            "n_samples": 5,
+            "raw_ms": [
+              0.086,
+              0.082,
+              0.08,
+              0.083,
+              0.083
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.089,
+            "median_ms": 0.09,
+            "std_ms": 0.006,
+            "min_ms": 0.082,
+            "max_ms": 0.097,
+            "ci_95": [
+              0.082,
+              0.096
+            ],
+            "cv": 0.063,
+            "n_samples": 5,
+            "raw_ms": [
+              0.097,
+              0.086,
+              0.092,
+              0.09,
+              0.082
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.051
+        }
+      }
+    },
+    {
+      "problem": "convolution (len=500)",
+      "category": "D: Specialized",
+      "size_label": "medium",
+      "dominant_ops": [
+        "conv",
+        "sum_squares"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.058,
+            "median_ms": 0.057,
+            "std_ms": 0.003,
+            "min_ms": 0.054,
+            "max_ms": 0.062,
+            "ci_95": [
+              0.054,
+              0.062
+            ],
+            "cv": 0.0507,
+            "n_samples": 5,
+            "raw_ms": [
+              0.062,
+              0.059,
+              0.057,
+              0.057,
+              0.054
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.117,
+            "median_ms": 0.115,
+            "std_ms": 0.006,
+            "min_ms": 0.111,
+            "max_ms": 0.126,
+            "ci_95": [
+              0.11,
+              0.124
+            ],
+            "cv": 0.0486,
+            "n_samples": 5,
+            "raw_ms": [
+              0.126,
+              0.115,
+              0.118,
+              0.115,
+              0.111
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.082,
+            "median_ms": 0.082,
+            "std_ms": 0.005,
+            "min_ms": 0.077,
+            "max_ms": 0.087,
+            "ci_95": [
+              0.077,
+              0.088
+            ],
+            "cv": 0.0572,
+            "n_samples": 5,
+            "raw_ms": [
+              0.087,
+              0.082,
+              0.087,
+              0.078,
+              0.077
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.085,
+            "median_ms": 0.082,
+            "std_ms": 0.006,
+            "min_ms": 0.079,
+            "max_ms": 0.092,
+            "ci_95": [
+              0.078,
+              0.092
+            ],
+            "cv": 0.0661,
+            "n_samples": 5,
+            "raw_ms": [
+              0.09,
+              0.092,
+              0.081,
+              0.082,
+              0.079
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.012
+        }
+      }
+    },
+    {
+      "problem": "nested_affine (depth=3)",
+      "category": "E: Depth",
+      "size_label": "small",
+      "dominant_ops": [
+        "mul_chain"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.055,
+            "median_ms": 0.056,
+            "std_ms": 0.003,
+            "min_ms": 0.052,
+            "max_ms": 0.059,
+            "ci_95": [
+              0.052,
+              0.059
+            ],
+            "cv": 0.0458,
+            "n_samples": 5,
+            "raw_ms": [
+              0.056,
+              0.056,
+              0.054,
+              0.052,
+              0.059
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.119,
+            "median_ms": 0.118,
+            "std_ms": 0.004,
+            "min_ms": 0.113,
+            "max_ms": 0.124,
+            "ci_95": [
+              0.113,
+              0.124
+            ],
+            "cv": 0.0371,
+            "n_samples": 5,
+            "raw_ms": [
+              0.117,
+              0.124,
+              0.113,
+              0.122,
+              0.118
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.087,
+            "median_ms": 0.087,
+            "std_ms": 0.007,
+            "min_ms": 0.076,
+            "max_ms": 0.096,
+            "ci_95": [
+              0.078,
+              0.096
+            ],
+            "cv": 0.0833,
+            "n_samples": 5,
+            "raw_ms": [
+              0.096,
+              0.087,
+              0.089,
+              0.087,
+              0.076
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.088,
+            "median_ms": 0.088,
+            "std_ms": 0.003,
+            "min_ms": 0.084,
+            "max_ms": 0.091,
+            "ci_95": [
+              0.083,
+              0.092
+            ],
+            "cv": 0.0391,
+            "n_samples": 5,
+            "raw_ms": [
+              0.088,
+              0.084,
+              0.091,
+              0.09,
+              0.084
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 2.146
+        }
+      }
+    },
+    {
+      "problem": "nested_affine (depth=5)",
+      "category": "E: Depth",
+      "size_label": "small",
+      "dominant_ops": [
+        "mul_chain"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.062,
+            "median_ms": 0.059,
+            "std_ms": 0.007,
+            "min_ms": 0.055,
+            "max_ms": 0.073,
+            "ci_95": [
+              0.053,
+              0.07
+            ],
+            "cv": 0.1112,
+            "n_samples": 5,
+            "raw_ms": [
+              0.073,
+              0.063,
+              0.059,
+              0.058,
+              0.055
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.117,
+            "median_ms": 0.116,
+            "std_ms": 0.005,
+            "min_ms": 0.111,
+            "max_ms": 0.123,
+            "ci_95": [
+              0.11,
+              0.123
+            ],
+            "cv": 0.0437,
+            "n_samples": 5,
+            "raw_ms": [
+              0.123,
+              0.12,
+              0.113,
+              0.116,
+              0.111
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.081,
+            "median_ms": 0.079,
+            "std_ms": 0.005,
+            "min_ms": 0.076,
+            "max_ms": 0.089,
+            "ci_95": [
+              0.075,
+              0.087
+            ],
+            "cv": 0.0639,
+            "n_samples": 5,
+            "raw_ms": [
+              0.089,
+              0.079,
+              0.083,
+              0.078,
+              0.076
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.088,
+            "median_ms": 0.09,
+            "std_ms": 0.004,
+            "min_ms": 0.084,
+            "max_ms": 0.093,
+            "ci_95": [
+              0.083,
+              0.094
+            ],
+            "cv": 0.0467,
+            "n_samples": 5,
+            "raw_ms": [
+              0.091,
+              0.093,
+              0.09,
+              0.084,
+              0.084
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.897
+        }
+      }
+    },
+    {
+      "problem": "nested_affine (depth=10)",
+      "category": "E: Depth",
+      "size_label": "medium",
+      "dominant_ops": [
+        "mul_chain"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.06,
+            "median_ms": 0.059,
+            "std_ms": 0.006,
+            "min_ms": 0.054,
+            "max_ms": 0.068,
+            "ci_95": [
+              0.052,
+              0.067
+            ],
+            "cv": 0.1002,
+            "n_samples": 5,
+            "raw_ms": [
+              0.059,
+              0.054,
+              0.054,
+              0.064,
+              0.068
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.116,
+            "median_ms": 0.115,
+            "std_ms": 0.006,
+            "min_ms": 0.11,
+            "max_ms": 0.124,
+            "ci_95": [
+              0.109,
+              0.124
+            ],
+            "cv": 0.0509,
+            "n_samples": 5,
+            "raw_ms": [
+              0.115,
+              0.111,
+              0.11,
+              0.12,
+              0.124
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.083,
+            "median_ms": 0.084,
+            "std_ms": 0.004,
+            "min_ms": 0.076,
+            "max_ms": 0.087,
+            "ci_95": [
+              0.078,
+              0.088
+            ],
+            "cv": 0.0511,
+            "n_samples": 5,
+            "raw_ms": [
+              0.082,
+              0.087,
+              0.076,
+              0.086,
+              0.084
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.089,
+            "median_ms": 0.087,
+            "std_ms": 0.007,
+            "min_ms": 0.084,
+            "max_ms": 0.102,
+            "ci_95": [
+              0.08,
+              0.099
+            ],
+            "cv": 0.0821,
+            "n_samples": 5,
+            "raw_ms": [
+              0.085,
+              0.084,
+              0.102,
+              0.089,
+              0.087
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.944
+        }
+      }
+    },
+    {
+      "problem": "nested_affine (depth=20)",
+      "category": "E: Depth",
+      "size_label": "large",
+      "dominant_ops": [
+        "mul_chain"
+      ],
+      "measurements": {
+        "build_matrix": {
+          "RUST": {
+            "mean_ms": 0.063,
+            "median_ms": 0.06,
+            "std_ms": 0.008,
+            "min_ms": 0.057,
+            "max_ms": 0.076,
+            "ci_95": [
+              0.053,
+              0.073
+            ],
+            "cv": 0.127,
+            "n_samples": 5,
+            "raw_ms": [
+              0.076,
+              0.065,
+              0.06,
+              0.057,
+              0.058
+            ]
+          },
+          "SCIPY": {
+            "mean_ms": 0.117,
+            "median_ms": 0.114,
+            "std_ms": 0.006,
+            "min_ms": 0.113,
+            "max_ms": 0.126,
+            "ci_95": [
+              0.11,
+              0.124
+            ],
+            "cv": 0.0495,
+            "n_samples": 5,
+            "raw_ms": [
+              0.126,
+              0.114,
+              0.113,
+              0.121,
+              0.113
+            ]
+          },
+          "CPP": {
+            "mean_ms": 0.081,
+            "median_ms": 0.08,
+            "std_ms": 0.006,
+            "min_ms": 0.076,
+            "max_ms": 0.091,
+            "ci_95": [
+              0.074,
+              0.088
+            ],
+            "cv": 0.0683,
+            "n_samples": 5,
+            "raw_ms": [
+              0.091,
+              0.08,
+              0.08,
+              0.08,
+              0.076
+            ]
+          },
+          "COO": {
+            "mean_ms": 0.091,
+            "median_ms": 0.09,
+            "std_ms": 0.01,
+            "min_ms": 0.082,
+            "max_ms": 0.107,
+            "ci_95": [
+              0.079,
+              0.103
+            ],
+            "cv": 0.1054,
+            "n_samples": 5,
+            "raw_ms": [
+              0.107,
+              0.093,
+              0.09,
+              0.085,
+              0.082
+            ]
+          }
+        }
+      },
+      "speedups": {
+        "build_matrix": {
+          "RUST_vs_SCIPY": 1.857
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_problems": 40,
+    "geometric_mean_speedup": 4.869,
+    "arithmetic_mean_speedup": 11.574,
+    "min_speedup": 1.817,
+    "max_speedup": 75.173,
+    "RUST_wins": 40
+  },
+  "scaling_analysis": {
+    "constraint_count": {
+      "title": "Constraint Count Scaling",
+      "axis_name": "n_constraints",
+      "axis_values": [
+        "4",
+        "10",
+        "50",
+        "100",
+        "500",
+        "1000",
+        "2000",
+        "5000"
+      ],
+      "build_matrix_ms": {
+        "RUST": [
+          0.0857834,
+          0.14516679999999998,
+          0.34225039999999995,
+          0.5534664000000001,
+          2.3711084,
+          4.7389247999999995,
+          9.6682668,
+          24.209849600000002
+        ],
+        "SCIPY": [
+          0.9269832000000001,
+          2.1985666,
+          10.822816600000001,
+          21.549116400000003,
+          108.44137520000001,
+          215.72322520000003,
+          433.94945859999996,
+          1086.8034831999998
+        ],
+        "CPP": [
+          0.1780664,
+          0.2968166,
+          1.0976498,
+          2.2752668,
+          14.226175000000001,
+          33.5574668,
+          85.6952418,
+          370.5064082
+        ],
+        "COO": [
+          0.6333998,
+          1.4328002000000002,
+          6.9552000000000005,
+          13.9433666,
+          69.7228334,
+          139.6447416,
+          278.84215800000004,
+          702.3476168
+        ]
+      },
+      "speedups": [
+        10.806090688874539,
+        15.145106181303165,
+        31.622509718031015,
+        38.93482314373555,
+        45.73446545084148,
+        45.52155484720924,
+        44.88389362610473,
+        44.890963849688674
+      ]
+    },
+    "variable_size": {
+      "title": "Variable Size Scaling",
+      "axis_name": "n_vars",
+      "axis_values": [
+        "10",
+        "50",
+        "100",
+        "500",
+        "1000",
+        "2000",
+        "5000"
+      ],
+      "build_matrix_ms": {
+        "RUST": [
+          0.05802500000000001,
+          0.0561584,
+          0.056975200000000004,
+          0.0556168,
+          0.0575084,
+          0.06155839999999999,
+          0.062083200000000005
+        ],
+        "SCIPY": [
+          0.1173334,
+          0.1156,
+          0.11469979999999999,
+          0.11510019999999999,
+          0.1124582,
+          0.1300752,
+          0.1262
+        ],
+        "CPP": [
+          0.08539160000000001,
+          0.0903168,
+          0.0818668,
+          0.0855252,
+          0.0803334,
+          0.09233340000000001,
+          0.0869832
+        ],
+        "COO": [
+          0.0859666,
+          0.0841752,
+          0.08547500000000001,
+          0.0866248,
+          0.0874252,
+          0.09199159999999999,
+          0.091825
+        ]
+      },
+      "speedups": [
+        2.02211805256355,
+        2.0584632040798883,
+        2.013153091169491,
+        2.0695221587721693,
+        1.955509108234623,
+        2.1130373758902117,
+        2.032756043502912
+      ]
+    },
+    "density": {
+      "title": "Matrix Density Scaling",
+      "axis_name": "density",
+      "axis_values": [
+        "0.001",
+        "0.01",
+        "0.05",
+        "0.1",
+        "0.3",
+        "0.5",
+        "1.0"
+      ],
+      "build_matrix_ms": {
+        "RUST": [
+          0.0724752,
+          0.0728084,
+          0.0735746,
+          0.0700998,
+          0.0755084,
+          0.068833,
+          0.0736252
+        ],
+        "SCIPY": [
+          0.29060840000000004,
+          0.2868916,
+          0.285075,
+          0.2829918,
+          0.2845836,
+          0.27745,
+          0.2782664
+        ],
+        "CPP": [
+          0.12199179999999998,
+          0.1243,
+          0.11989160000000001,
+          0.1184164,
+          0.121333,
+          0.1196582,
+          0.12102520000000001
+        ],
+        "COO": [
+          0.2473916,
+          0.2562668,
+          0.24644159999999998,
+          0.24602500000000002,
+          0.24899180000000004,
+          0.2539834,
+          0.24890839999999997
+        ]
+      },
+      "speedups": [
+        4.009763339735524,
+        3.940364023931305,
+        3.8746388019778566,
+        4.036984413650253,
+        3.768899883986417,
+        4.030770124794793,
+        3.7794994105279174
+      ]
+    }
+  }
+}

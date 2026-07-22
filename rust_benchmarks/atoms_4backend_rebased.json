@@ -1,0 +1,1142 @@
+{
+  "kind": "atom_sweep",
+  "backends": [
+    "RUST",
+    "SCIPY",
+    "CPP",
+    "COO"
+  ],
+  "reps": 2,
+  "inventory": {
+    "export_count": 129,
+    "direct": {
+      "abs": "abs",
+      "bmat": "bmat",
+      "broadcast_to": "broadcast_to",
+      "ceil": "ceil",
+      "concatenate": "concatenate",
+      "condition_number": "condition_number",
+      "conj": "conj",
+      "convolve": "convolve",
+      "cummax": "cummax",
+      "cumprod": "cumprod",
+      "cumsum": "cumsum",
+      "cvar": "cvar",
+      "diff": "diff",
+      "diff_pos": "diff_pos",
+      "dist_ratio": "dist_ratio",
+      "dotsort": "dotsort",
+      "einsum": "einsum",
+      "entr": "entr",
+      "exp": "exp",
+      "eye_minus_inv": "eye_minus_inv",
+      "floor": "floor",
+      "gen_lambda_max": "gen_lambda_max",
+      "geo_mean": "geo_mean",
+      "gmatmul": "gmatmul",
+      "harmonic_mean": "harmonic_mean",
+      "hermitian_wrap": "hermitian_wrap",
+      "hstack": "hstack",
+      "huber": "huber",
+      "imag": "imag",
+      "inv_pos": "inv_pos",
+      "inv_prod": "inv_prod",
+      "kl_div": "kl_div",
+      "lambda_max": "lambda_max",
+      "lambda_min": "lambda_min",
+      "lambda_sum_largest": "lambda_sum_largest",
+      "lambda_sum_smallest": "lambda_sum_smallest",
+      "length": "length",
+      "log": "log",
+      "log1p": "log1p",
+      "log_det": "log_det",
+      "log_normcdf": "log_normcdf",
+      "log_sum_exp": "log_sum_exp",
+      "loggamma": "loggamma",
+      "logistic": "logistic",
+      "matrix_frac": "matrix_frac",
+      "max": "max",
+      "maximum": "maximum",
+      "mean": "mean",
+      "min": "min",
+      "minimum": "minimum",
+      "mixed_norm": "mixed_norm",
+      "moveaxis": "moveaxis",
+      "multiply": "multiply",
+      "neg": "neg",
+      "norm1": "norm1",
+      "norm2": "norm2",
+      "norm_inf": "norm_inf",
+      "one_minus_pos": "one_minus_pos",
+      "outer": "outer",
+      "partial_trace": "partial_trace",
+      "partial_transpose": "partial_transpose",
+      "permute_dims": "permute_dims",
+      "perspective": "perspective",
+      "pf_eigenvalue": "pf_eigenvalue",
+      "pos": "pos",
+      "prod": "prod",
+      "promote": "promote",
+      "psd_wrap": "psd_wrap",
+      "ptp": "ptp",
+      "quad_form": "quad_form",
+      "quad_over_lin": "quad_over_lin",
+      "quantum_cond_entr": "quantum_cond_entr",
+      "quantum_rel_entr": "quantum_rel_entr",
+      "real": "real",
+      "rel_entr": "rel_entr",
+      "reshape": "reshape",
+      "resolvent": "resolvent",
+      "scalar_product": "scalar_product",
+      "scalene": "scalene",
+      "sigma_max": "sigma_max",
+      "sign": "sign",
+      "skew_symmetric_wrap": "skew_symmetric_wrap",
+      "sqrt": "sqrt",
+      "square": "square",
+      "squeeze": "squeeze",
+      "stack": "stack",
+      "std": "std",
+      "sum": "sum",
+      "sum_largest": "sum_largest",
+      "sum_smallest": "sum_smallest",
+      "sum_squares": "sum_squares",
+      "swapaxes": "swapaxes",
+      "symmetric_wrap": "symmetric_wrap",
+      "tr_inv": "tr_inv",
+      "trace": "trace",
+      "transpose": "transpose",
+      "tv": "tv",
+      "upper_tri": "upper_tri",
+      "var": "var",
+      "vdot": "vdot",
+      "vec": "vec",
+      "vec_to_upper_tri": "vec_to_upper_tri",
+      "von_neumann_entr": "von_neumann_entr",
+      "vstack": "vstack",
+      "xexp": "xexp"
+    },
+    "aliases": {
+      "AddExpression": "sum",
+      "GeoMean": "geo_mean",
+      "GeoMeanApprox": "geo_mean",
+      "HuberAtom": "huber",
+      "HuberPerspectiveAtom": "huber_perspective",
+      "MatrixFrac": "matrix_frac",
+      "MulExpression": "matmul_const_left",
+      "Pnorm": "pnorm_1_5",
+      "PnormApprox": "pnorm_1_5",
+      "Power": "power_1_5",
+      "PowerApprox": "power_1_5",
+      "Prod": "prod",
+      "QuadForm": "quad_form",
+      "Sum": "sum",
+      "Trace": "trace",
+      "conv": "convolve",
+      "diag": "diag_vec",
+      "kron": "kron_const_expr",
+      "matmul": "matmul_const_left",
+      "norm": "norm2",
+      "normNuc": "norm_nuc",
+      "pnorm": "pnorm_1_5",
+      "power": "power_1_5"
+    },
+    "helpers": {
+      "deep_flatten": "expression-list helper used by reshape, not an Atom"
+    }
+  },
+  "results": [
+    {
+      "atom": "unary_neg",
+      "mode": "dcp",
+      "RUST": 0.46652049786644056,
+      "SCIPY": 0.522478498169221,
+      "CPP": 0.43437499698484316,
+      "COO": 0.4398334931465797
+    },
+    {
+      "atom": "sum",
+      "mode": "dcp",
+      "RUST": 0.4417495001689531,
+      "SCIPY": 0.5113545048516244,
+      "CPP": 0.4371244940557517,
+      "COO": 0.43237550562480465
+    },
+    {
+      "atom": "sum_axis",
+      "mode": "dcp",
+      "RUST": 0.43658299546223134,
+      "SCIPY": 0.7711454964010045,
+      "CPP": 0.46387550537474453,
+      "COO": 0.5921664997003973
+    },
+    {
+      "atom": "cumsum",
+      "mode": "dcp",
+      "RUST": 0.866936992679257,
+      "SCIPY": 1.377687498461455,
+      "CPP": 0.9672915039118379,
+      "COO": 1.0485210004844703
+    },
+    {
+      "atom": "diff",
+      "mode": "dcp",
+      "RUST": 0.4901869979221374,
+      "SCIPY": 0.6723124970449135,
+      "CPP": 0.5305840022629127,
+      "COO": 0.5550414934987202
+    },
+    {
+      "atom": "multiply",
+      "mode": "dcp",
+      "RUST": 0.45250000403029844,
+      "SCIPY": 0.6242709932848811,
+      "CPP": 0.4762289972859435,
+      "COO": 0.6213544984348118
+    },
+    {
+      "atom": "matmul_const_left",
+      "mode": "dcp",
+      "RUST": 0.44804150093114004,
+      "SCIPY": 0.6143755017546937,
+      "CPP": 0.4787085053976625,
+      "COO": 0.607166497502476
+    },
+    {
+      "atom": "matmul_const_right",
+      "mode": "dcp",
+      "RUST": 0.44229150080354884,
+      "SCIPY": 0.7248540059663355,
+      "CPP": 0.48141650040633976,
+      "COO": 0.6090415045036934
+    },
+    {
+      "atom": "divide",
+      "mode": "dcp",
+      "RUST": 0.44364600034896284,
+      "SCIPY": 0.6296455030678771,
+      "CPP": 0.474437496450264,
+      "COO": 0.6404370069503784
+    },
+    {
+      "atom": "index_slice",
+      "mode": "dcp",
+      "RUST": 0.431645501521416,
+      "SCIPY": 0.5484165012603626,
+      "CPP": 0.4685414969571866,
+      "COO": 0.4702914957306348
+    },
+    {
+      "atom": "index_matrix",
+      "mode": "dcp",
+      "RUST": 0.43033350084442645,
+      "SCIPY": 0.5426249990705401,
+      "CPP": 0.4595830032485537,
+      "COO": 0.47247949260054156
+    },
+    {
+      "atom": "transpose",
+      "mode": "dcp",
+      "RUST": 0.4330419978941791,
+      "SCIPY": 0.5372505038394593,
+      "CPP": 0.45370850421022624,
+      "COO": 0.46972950076451525
+    },
+    {
+      "atom": "reshape",
+      "mode": "dcp",
+      "RUST": 0.42239549657097086,
+      "SCIPY": 0.5128960037836805,
+      "CPP": 0.4583334957715124,
+      "COO": 0.45220800529932603
+    },
+    {
+      "atom": "vec",
+      "mode": "dcp",
+      "RUST": 0.4248745026416145,
+      "SCIPY": 0.5164795002201572,
+      "CPP": 0.44772899855161086,
+      "COO": 0.45468699681805447
+    },
+    {
+      "atom": "promote",
+      "mode": "dcp",
+      "RUST": 0.46183350059436634,
+      "SCIPY": 0.7070840074447915,
+      "CPP": 0.4936869954690337,
+      "COO": 0.5256669974187389
+    },
+    {
+      "atom": "broadcast_to",
+      "mode": "dcp",
+      "RUST": 0.43041649769293144,
+      "SCIPY": 0.5422500034910627,
+      "CPP": null,
+      "COO": 0.4895000020042062
+    },
+    {
+      "atom": "hstack",
+      "mode": "dcp",
+      "RUST": 0.44364600034896284,
+      "SCIPY": 0.6961879917071201,
+      "CPP": 0.47091650048969314,
+      "COO": 0.4811870021512732
+    },
+    {
+      "atom": "vstack",
+      "mode": "dcp",
+      "RUST": 0.4506459954427555,
+      "SCIPY": 0.7544379914179444,
+      "CPP": 0.47479200293309987,
+      "COO": 0.5299795011524111
+    },
+    {
+      "atom": "concatenate",
+      "mode": "dcp",
+      "RUST": 0.4558120053843595,
+      "SCIPY": 0.7486044996767305,
+      "CPP": null,
+      "COO": 0.5208540023886599
+    },
+    {
+      "atom": "bmat",
+      "mode": "dcp",
+      "RUST": 0.5157090054126456,
+      "SCIPY": 1.2572710038512014,
+      "CPP": 0.5644369957735762,
+      "COO": 0.6584375078091398
+    },
+    {
+      "atom": "diag_vec",
+      "mode": "dcp",
+      "RUST": 0.44347949733491987,
+      "SCIPY": 0.5783960004919209,
+      "CPP": 0.4736875052913092,
+      "COO": 0.4745419937535189
+    },
+    {
+      "atom": "diag_mat",
+      "mode": "dcp",
+      "RUST": 0.42156250128755346,
+      "SCIPY": 0.5388544959714636,
+      "CPP": 0.454084001830779,
+      "COO": 0.45602049794979393
+    },
+    {
+      "atom": "trace",
+      "mode": "dcp",
+      "RUST": 0.405396000132896,
+      "SCIPY": 0.5313539950293489,
+      "CPP": 0.4307080016587861,
+      "COO": 0.44891650759382173
+    },
+    {
+      "atom": "upper_tri",
+      "mode": "dcp",
+      "RUST": 0.4236664972268045,
+      "SCIPY": 0.5524169973796234,
+      "CPP": 0.4464579978957772,
+      "COO": 0.4778954971698113
+    },
+    {
+      "atom": "kron_const_expr",
+      "mode": "dcp",
+      "RUST": 0.440500007243827,
+      "SCIPY": 0.7476249957107939,
+      "CPP": 0.47758400614839047,
+      "COO": 0.7024789956631139
+    },
+    {
+      "atom": "kron_expr_const",
+      "mode": "dcp",
+      "RUST": 0.4405625077197328,
+      "SCIPY": 0.7315000038943253,
+      "CPP": 0.47045850806171075,
+      "COO": 0.696083006914705
+    },
+    {
+      "atom": "convolve",
+      "mode": "dcp",
+      "RUST": 0.4425209990586154,
+      "SCIPY": 0.7134789993870072,
+      "CPP": 0.4762290045619011,
+      "COO": 0.6950215029064566
+    },
+    {
+      "atom": "einsum",
+      "mode": "dcp",
+      "RUST": 0.579104496864602,
+      "SCIPY": 0.9269380025216378,
+      "CPP": null,
+      "COO": 0.8794585010036826
+    },
+    {
+      "atom": "partial_trace",
+      "mode": "dcp",
+      "RUST": 0.6917709979461506,
+      "SCIPY": 2.0906874997308478,
+      "CPP": 0.9574789946782403,
+      "COO": 1.7776879976736382
+    },
+    {
+      "atom": "partial_transpose",
+      "mode": "dcp",
+      "RUST": 1.405583490850404,
+      "SCIPY": 6.8915624942746945,
+      "CPP": 1.9716045062523335,
+      "COO": 5.667687502864283
+    },
+    {
+      "atom": "nd_sum_axis",
+      "mode": "dcp",
+      "RUST": 0.4368959998828359,
+      "SCIPY": 0.6274795086937957,
+      "CPP": null,
+      "COO": 0.47989599988795817
+    },
+    {
+      "atom": "nd_transpose",
+      "mode": "dcp",
+      "RUST": 0.43189550342503935,
+      "SCIPY": 0.5430000019259751,
+      "CPP": null,
+      "COO": 0.47375000576721504
+    },
+    {
+      "atom": "nd_matmul",
+      "mode": "dcp",
+      "RUST": 0.6077079960959964,
+      "SCIPY": 0.7518749989685602,
+      "CPP": null,
+      "COO": 0.620145998254884
+    },
+    {
+      "atom": "nd_parametric_matmul",
+      "mode": "dcp",
+      "RUST": 1.3932290021330118,
+      "SCIPY": 1.5602710045641288,
+      "CPP": null,
+      "COO": 1.3652500056196004
+    },
+    {
+      "atom": "outer",
+      "mode": "dcp",
+      "RUST": 0.4754164910991676,
+      "SCIPY": 0.7136665008147247,
+      "CPP": 0.5041664990130812,
+      "COO": 0.6204379969858564
+    },
+    {
+      "atom": "vdot",
+      "mode": "dcp",
+      "RUST": 0.4609374955180101,
+      "SCIPY": 0.6526459983433597,
+      "CPP": 0.5139994973433204,
+      "COO": 0.6419169949367642
+    },
+    {
+      "atom": "scalar_product",
+      "mode": "dcp",
+      "RUST": 0.463937503809575,
+      "SCIPY": 0.6312909972621128,
+      "CPP": 0.48954199155559763,
+      "COO": 0.6894999969517812
+    },
+    {
+      "atom": "squeeze",
+      "mode": "dcp",
+      "RUST": 0.4205630029900931,
+      "SCIPY": 0.5100005000713281,
+      "CPP": null,
+      "COO": 0.4512704981607385
+    },
+    {
+      "atom": "swapaxes",
+      "mode": "dcp",
+      "RUST": 0.4236459935782477,
+      "SCIPY": 0.5390204969444312,
+      "CPP": null,
+      "COO": 0.4684375016950071
+    },
+    {
+      "atom": "moveaxis",
+      "mode": "dcp",
+      "RUST": 0.4257085020071827,
+      "SCIPY": 0.5336879985406995,
+      "CPP": null,
+      "COO": 0.4646460001822561
+    },
+    {
+      "atom": "permute_dims",
+      "mode": "dcp",
+      "RUST": 0.4220624905428849,
+      "SCIPY": 0.537833504495211,
+      "CPP": null,
+      "COO": 0.48500049888389185
+    },
+    {
+      "atom": "stack",
+      "mode": "dcp",
+      "RUST": 0.4849585020565428,
+      "SCIPY": 0.7915419992059469,
+      "CPP": null,
+      "COO": 0.5680000031134114
+    },
+    {
+      "atom": "vec_to_upper_tri",
+      "mode": "dcp",
+      "RUST": 0.4903329972876236,
+      "SCIPY": 0.6637295009568334,
+      "CPP": 0.5467500086524524,
+      "COO": 0.6650415016338229
+    },
+    {
+      "atom": "symmetric_wrap",
+      "mode": "dcp",
+      "RUST": 0.4245209929649718,
+      "SCIPY": 0.5078119938843884,
+      "CPP": 0.4436040035216138,
+      "COO": 0.4456040041986853
+    },
+    {
+      "atom": "psd_wrap",
+      "mode": "dcp",
+      "RUST": 0.5605414989986457,
+      "SCIPY": 0.6996244992478751,
+      "CPP": 0.6066874993848614,
+      "COO": 0.6970000031287782
+    },
+    {
+      "atom": "skew_symmetric_wrap",
+      "mode": "dcp",
+      "RUST": 0.42210399988107383,
+      "SCIPY": 0.5094375010230578,
+      "CPP": 0.44160449760966003,
+      "COO": 0.4452915018191561
+    },
+    {
+      "atom": "hermitian_wrap",
+      "mode": "dcp",
+      "RUST": 0.6935420024092309,
+      "SCIPY": 0.8267295052064583,
+      "CPP": 0.7352085012826137,
+      "COO": 0.8374585013370961
+    },
+    {
+      "atom": "conj",
+      "mode": "dcp",
+      "RUST": 0.446020501840394,
+      "SCIPY": 0.5300630000419915,
+      "CPP": 0.4645629960577935,
+      "COO": 0.46324950380949304
+    },
+    {
+      "atom": "real",
+      "mode": "dcp",
+      "RUST": 0.4354794946266338,
+      "SCIPY": 0.5230000024312176,
+      "CPP": 0.4618540042429231,
+      "COO": 0.4577294967020862
+    },
+    {
+      "atom": "imag",
+      "mode": "dcp",
+      "RUST": 0.4318959981901571,
+      "SCIPY": 0.5177505008759908,
+      "CPP": 0.456603491329588,
+      "COO": 0.4566665011225268
+    },
+    {
+      "atom": "abs",
+      "mode": "dcp",
+      "RUST": 0.7491039868909866,
+      "SCIPY": 1.0343130052206106,
+      "CPP": 0.789166493632365,
+      "COO": 0.8264165007858537
+    },
+    {
+      "atom": "pos",
+      "mode": "dcp",
+      "RUST": 0.7810000024619512,
+      "SCIPY": 1.0554585023783147,
+      "CPP": 0.8282295020762831,
+      "COO": 0.8638334984425455
+    },
+    {
+      "atom": "neg",
+      "mode": "dcp",
+      "RUST": 0.8388749993173406,
+      "SCIPY": 1.137438004661817,
+      "CPP": 0.8876664942363277,
+      "COO": 0.9163335053017363
+    },
+    {
+      "atom": "square",
+      "mode": "dcp",
+      "RUST": 0.7921665019239299,
+      "SCIPY": 0.8588745040469803,
+      "CPP": 0.8040834873099811,
+      "COO": 0.8023120026336983
+    },
+    {
+      "atom": "sqrt",
+      "mode": "dcp",
+      "RUST": 1.036375506373588,
+      "SCIPY": 1.6332710001734085,
+      "CPP": 1.0691045026760548,
+      "COO": 1.3241665001260117
+    },
+    {
+      "atom": "power_1_5",
+      "mode": "dcp",
+      "RUST": 1.3099379939376377,
+      "SCIPY": 2.4189999894588254,
+      "CPP": 1.4007290010340512,
+      "COO": 1.9456874942989089
+    },
+    {
+      "atom": "exp",
+      "mode": "dcp",
+      "RUST": 0.7854374998714775,
+      "SCIPY": 1.0080415013362654,
+      "CPP": 0.8151455040206201,
+      "COO": 0.8614375110482797
+    },
+    {
+      "atom": "log",
+      "mode": "dcp",
+      "RUST": 0.8122289946186356,
+      "SCIPY": 1.0621459950925782,
+      "CPP": 0.8574580060667358,
+      "COO": 0.8815205001155846
+    },
+    {
+      "atom": "log1p",
+      "mode": "dcp",
+      "RUST": 0.8670204988447949,
+      "SCIPY": 1.1737500026356429,
+      "CPP": 0.9195840029860847,
+      "COO": 0.9630619970266707
+    },
+    {
+      "atom": "entr",
+      "mode": "dcp",
+      "RUST": 0.8078540049609728,
+      "SCIPY": 1.0498955016373657,
+      "CPP": 0.8447290092590265,
+      "COO": 0.8778749979683198
+    },
+    {
+      "atom": "huber",
+      "mode": "dcp",
+      "RUST": 1.4183120074449107,
+      "SCIPY": 1.9801039961748756,
+      "CPP": 1.4888334990246221,
+      "COO": 1.6911040002014488
+    },
+    {
+      "atom": "huber_perspective",
+      "mode": "dcp",
+      "RUST": 2.0485205022851005,
+      "SCIPY": 3.598062503442634,
+      "CPP": 2.1846669988008216,
+      "COO": 2.7349169977242127
+    },
+    {
+      "atom": "logistic",
+      "mode": "dcp",
+      "RUST": 1.2523130062618293,
+      "SCIPY": 1.8140419997507706,
+      "CPP": 1.314166496740654,
+      "COO": 1.395229497575201
+    },
+    {
+      "atom": "inv_pos",
+      "mode": "dcp",
+      "RUST": 0.9367495003971271,
+      "SCIPY": 1.457166494219564,
+      "CPP": 0.9876874973997474,
+      "COO": 1.0928750052698888
+    },
+    {
+      "atom": "maximum",
+      "mode": "dcp",
+      "RUST": 0.7782504908391275,
+      "SCIPY": 1.0604370036162436,
+      "CPP": 0.8283959978143685,
+      "COO": 0.8573540035285987
+    },
+    {
+      "atom": "minimum",
+      "mode": "dcp",
+      "RUST": 0.82945849862881,
+      "SCIPY": 1.1452500039013103,
+      "CPP": 0.8831039958749898,
+      "COO": 0.9171665005851537
+    },
+    {
+      "atom": "kl_div",
+      "mode": "dcp",
+      "RUST": 0.8323960064444691,
+      "SCIPY": 1.1980625058640726,
+      "CPP": 0.8856245040078647,
+      "COO": 0.935332995140925
+    },
+    {
+      "atom": "rel_entr",
+      "mode": "dcp",
+      "RUST": 0.7833749987185001,
+      "SCIPY": 1.014250003208872,
+      "CPP": 0.8232920008595102,
+      "COO": 0.8572704973630607
+    },
+    {
+      "atom": "xexp",
+      "mode": "dcp",
+      "RUST": 1.9562499946914613,
+      "SCIPY": 3.1067085074028,
+      "CPP": 2.052563002507668,
+      "COO": 2.4191250049625523
+    },
+    {
+      "atom": "log_normcdf",
+      "mode": "dcp",
+      "RUST": 1.6491869973833673,
+      "SCIPY": 2.672208509466145,
+      "CPP": 1.7967704989132471,
+      "COO": 2.2781874940847047
+    },
+    {
+      "atom": "loggamma",
+      "mode": "dcp",
+      "RUST": 3.641125003923662,
+      "SCIPY": 6.502916497993283,
+      "CPP": 3.8562085028388537,
+      "COO": 5.6060834976960905
+    },
+    {
+      "atom": "scalene",
+      "mode": "dcp",
+      "RUST": 1.1302920029265806,
+      "SCIPY": 1.8657295004231855,
+      "CPP": 1.2138335005147383,
+      "COO": 1.58200000441866
+    },
+    {
+      "atom": "norm1",
+      "mode": "dcp",
+      "RUST": 0.7434584986185655,
+      "SCIPY": 1.0286659962730482,
+      "CPP": 0.7957914931466803,
+      "COO": 0.8246669895015657
+    },
+    {
+      "atom": "norm2",
+      "mode": "dcp",
+      "RUST": 0.7402290066238493,
+      "SCIPY": 0.8809380015009083,
+      "CPP": 0.7697294931858778,
+      "COO": 0.8095829980447888
+    },
+    {
+      "atom": "norm_inf",
+      "mode": "dcp",
+      "RUST": 0.7782085085636936,
+      "SCIPY": 1.0994585099979304,
+      "CPP": 0.8108129986794665,
+      "COO": 0.9187910036416724
+    },
+    {
+      "atom": "pnorm_1_5",
+      "mode": "dcp",
+      "RUST": 1.704771006188821,
+      "SCIPY": 3.259895500377752,
+      "CPP": 1.8316879941266961,
+      "COO": 2.7458540062070824
+    },
+    {
+      "atom": "norm_nuc",
+      "mode": "dcp",
+      "RUST": 1.534499999252148,
+      "SCIPY": 2.808666497003287,
+      "CPP": 1.7667915017227642,
+      "COO": 2.896416997828055
+    },
+    {
+      "atom": "sigma_max",
+      "mode": "dcp",
+      "RUST": 1.1854794938699342,
+      "SCIPY": 2.200291994086001,
+      "CPP": 1.3331255031516775,
+      "COO": 1.9449789979262277
+    },
+    {
+      "atom": "lambda_max",
+      "mode": "dcp",
+      "RUST": 1.1200625012861565,
+      "SCIPY": 1.4974790028645657,
+      "CPP": 1.2531870015664026,
+      "COO": 1.7180834911414422
+    },
+    {
+      "atom": "lambda_min",
+      "mode": "dcp",
+      "RUST": 1.196374993014615,
+      "SCIPY": 1.5999585011741146,
+      "CPP": 1.3371044988161884,
+      "COO": 1.7947080050362274
+    },
+    {
+      "atom": "log_det",
+      "mode": "dcp",
+      "RUST": 1.8318544971407391,
+      "SCIPY": 3.178166996804066,
+      "CPP": 1.9925000015064143,
+      "COO": 2.965791994938627
+    },
+    {
+      "atom": "log_sum_exp",
+      "mode": "dcp",
+      "RUST": 0.9993130079237744,
+      "SCIPY": 1.3995830013300292,
+      "CPP": 1.0499379932298325,
+      "COO": 1.1321879937895574
+    },
+    {
+      "atom": "quad_over_lin",
+      "mode": "dcp",
+      "RUST": 0.8818749993224628,
+      "SCIPY": 1.3642915000673383,
+      "CPP": 0.9335630020359531,
+      "COO": 1.1552290015970357
+    },
+    {
+      "atom": "quad_form",
+      "mode": "dcp",
+      "RUST": 0.7343545003095642,
+      "SCIPY": 0.7669795013498515,
+      "CPP": 0.739396498829592,
+      "COO": 0.7342294920817949
+    },
+    {
+      "atom": "matrix_frac",
+      "mode": "dcp",
+      "RUST": 1.3008749956497923,
+      "SCIPY": 2.376187992922496,
+      "CPP": 1.436103499145247,
+      "COO": 2.1756874994025566
+    },
+    {
+      "atom": "sum_largest",
+      "mode": "dcp",
+      "RUST": 0.8491669941577129,
+      "SCIPY": 1.281874989217613,
+      "CPP": 0.9096875000977889,
+      "COO": 1.1090209955000319
+    },
+    {
+      "atom": "sum_smallest",
+      "mode": "dcp",
+      "RUST": 0.9052085079019889,
+      "SCIPY": 1.3854165008524433,
+      "CPP": 0.9807495007407852,
+      "COO": 1.1815414909506217
+    },
+    {
+      "atom": "max",
+      "mode": "dcp",
+      "RUST": 0.651166497846134,
+      "SCIPY": 0.8217909999075346,
+      "CPP": 0.692478999553714,
+      "COO": 0.7428335011354648
+    },
+    {
+      "atom": "min",
+      "mode": "dcp",
+      "RUST": 0.6982710037846118,
+      "SCIPY": 0.9024790051626042,
+      "CPP": 0.7503544984501787,
+      "COO": 0.8037919978960417
+    },
+    {
+      "atom": "geo_mean",
+      "mode": "dcp",
+      "RUST": 2.917395999247674,
+      "SCIPY": 6.53677100490313,
+      "CPP": 3.1498959942837246,
+      "COO": 4.9932500114664435
+    },
+    {
+      "atom": "harmonic_mean",
+      "mode": "dcp",
+      "RUST": 1.180999999633059,
+      "SCIPY": 2.0129169934079982,
+      "CPP": 1.2525625061243773,
+      "COO": 1.841021003201604
+    },
+    {
+      "atom": "mixed_norm",
+      "mode": "dcp",
+      "RUST": 1.0226874946965836,
+      "SCIPY": 1.417354003933724,
+      "CPP": 1.0853334970306605,
+      "COO": 1.1591459915507585
+    },
+    {
+      "atom": "tv",
+      "mode": "dcp",
+      "RUST": 0.9694795007817447,
+      "SCIPY": 1.5563540000584908,
+      "CPP": 1.0307914926670492,
+      "COO": 1.1781665016314946
+    },
+    {
+      "atom": "dotsort",
+      "mode": "dcp",
+      "RUST": 1.1395205074222758,
+      "SCIPY": 2.201020506618079,
+      "CPP": 1.2490834997151978,
+      "COO": 1.779979000275489
+    },
+    {
+      "atom": "ptp",
+      "mode": "dcp",
+      "RUST": 0.8355000027222559,
+      "SCIPY": 1.1979170012637042,
+      "CPP": 0.9030420042108744,
+      "COO": 0.9927709979820065
+    },
+    {
+      "atom": "std",
+      "mode": "dcp",
+      "RUST": 0.9573749994160607,
+      "SCIPY": 1.352249993942678,
+      "CPP": 1.033500004268717,
+      "COO": 1.3885625012335368
+    },
+    {
+      "atom": "cvar",
+      "mode": "dcp",
+      "RUST": 0.8880834939191118,
+      "SCIPY": 1.3999375005369075,
+      "CPP": 0.948749999224674,
+      "COO": 1.3630840039695613
+    },
+    {
+      "atom": "cummax",
+      "mode": "dcp",
+      "RUST": 0.816312494862359,
+      "SCIPY": 1.1439584995969199,
+      "CPP": 0.8423955005127937,
+      "COO": 0.9141455011558719
+    },
+    {
+      "atom": "mean",
+      "mode": "dcp",
+      "RUST": 0.45424950076267123,
+      "SCIPY": 0.585916503041517,
+      "CPP": 0.4781875031767413,
+      "COO": 0.6127290034783073
+    },
+    {
+      "atom": "var",
+      "mode": "dcp",
+      "RUST": 1.251792004040908,
+      "SCIPY": 1.6429790048277937,
+      "CPP": 1.3137499918229878,
+      "COO": 1.642374503717292
+    },
+    {
+      "atom": "sum_squares",
+      "mode": "dcp",
+      "RUST": 0.7687295001232997,
+      "SCIPY": 0.8243749980465509,
+      "CPP": 0.8030210010474548,
+      "COO": 0.7919999989098869
+    },
+    {
+      "atom": "lambda_sum_largest",
+      "mode": "dcp",
+      "RUST": 1.7711249965941533,
+      "SCIPY": 2.656104006746318,
+      "CPP": 2.0184794993838295,
+      "COO": 3.205666500434745
+    },
+    {
+      "atom": "lambda_sum_smallest",
+      "mode": "dcp",
+      "RUST": 1.825749990530312,
+      "SCIPY": 2.800312497129198,
+      "CPP": 2.1039995044702664,
+      "COO": 3.3461665007052943
+    },
+    {
+      "atom": "inv_prod",
+      "mode": "dcp",
+      "RUST": 5.109416495542973,
+      "SCIPY": 10.770521010272205,
+      "CPP": 5.486333000590093,
+      "COO": 8.125375010422431
+    },
+    {
+      "atom": "perspective",
+      "mode": "dcp",
+      "RUST": 2.1818959939992055,
+      "SCIPY": 3.6419164898688905,
+      "CPP": 2.321271000255365,
+      "COO": 3.459354004007764
+    },
+    {
+      "atom": "tr_inv",
+      "mode": "dcp",
+      "RUST": 2.705895996768959,
+      "SCIPY": 5.757083003118169,
+      "CPP": 3.016854498127941,
+      "COO": 5.257771001197398
+    },
+    {
+      "atom": "von_neumann_entr",
+      "mode": "dcp",
+      "RUST": 5.389708501752466,
+      "SCIPY": 10.438916498969775,
+      "CPP": 5.867479500011541,
+      "COO": 9.598020500561688
+    },
+    {
+      "atom": "quantum_rel_entr",
+      "mode": "dcp",
+      "RUST": 4.363603999081533,
+      "SCIPY": 9.395979497639928,
+      "CPP": 4.821166498004459,
+      "COO": 10.481707999133505
+    },
+    {
+      "atom": "quantum_cond_entr",
+      "mode": "dcp",
+      "RUST": 4.696687501564156,
+      "SCIPY": 10.318000000552274,
+      "CPP": 5.39508350630058,
+      "COO": 11.42795799387386
+    },
+    {
+      "atom": "prod",
+      "mode": "dgp",
+      "RUST": 0.7793335025780834,
+      "SCIPY": 0.9793129938771017,
+      "CPP": 0.910563008801546,
+      "COO": 0.8290830010082573
+    },
+    {
+      "atom": "cumprod",
+      "mode": "dgp",
+      "RUST": 1.1518545070430264,
+      "SCIPY": 1.6525004975846969,
+      "CPP": 1.2293119943933561,
+      "COO": 1.2727920038742013
+    },
+    {
+      "atom": "gmatmul",
+      "mode": "dgp",
+      "RUST": 1.4722499981871806,
+      "SCIPY": 2.3508750018663704,
+      "CPP": 1.67181250435533,
+      "COO": 2.194791995862033
+    },
+    {
+      "atom": "one_minus_pos",
+      "mode": "dgp",
+      "RUST": 1.29824999748962,
+      "SCIPY": 7.277187498402782,
+      "CPP": 1.391020996379666,
+      "COO": 1.4549164989148267
+    },
+    {
+      "atom": "diff_pos",
+      "mode": "dgp",
+      "RUST": 1.601645999471657,
+      "SCIPY": 2.2627705038757995,
+      "CPP": 1.6566869962844066,
+      "COO": 1.7715205030981451
+    },
+    {
+      "atom": "eye_minus_inv",
+      "mode": "dgp",
+      "RUST": 5.574791495746467,
+      "SCIPY": 11.412374500650913,
+      "CPP": 5.9449999971548095,
+      "COO": 7.137291504477616
+    },
+    {
+      "atom": "resolvent",
+      "mode": "dgp",
+      "RUST": 5.936354500590824,
+      "SCIPY": 13.074354494165163,
+      "CPP": 7.3895000023185275,
+      "COO": 8.047395996982232
+    },
+    {
+      "atom": "pf_eigenvalue",
+      "mode": "dgp",
+      "RUST": 2.6761665067169815,
+      "SCIPY": 4.935229000693653,
+      "CPP": 2.8848124929936603,
+      "COO": 3.3905624950421043
+    },
+    {
+      "atom": "ceil",
+      "mode": "dqcp",
+      "RUST": 1.09956250526011,
+      "SCIPY": 1.443083499907516,
+      "CPP": 1.1278335005044937,
+      "COO": 1.1776454994105734
+    },
+    {
+      "atom": "floor",
+      "mode": "dqcp",
+      "RUST": 1.1706665027304552,
+      "SCIPY": 1.4934794962755404,
+      "CPP": 1.180437502625864,
+      "COO": 1.2394584991852753
+    },
+    {
+      "atom": "sign",
+      "mode": "dqcp",
+      "RUST": 1.00235400168458,
+      "SCIPY": 1.3585000051534735,
+      "CPP": 1.045978999172803,
+      "COO": 1.1005625055986457
+    },
+    {
+      "atom": "length",
+      "mode": "dqcp",
+      "RUST": 1.3325830004760064,
+      "SCIPY": 1.6946250034379773,
+      "CPP": 1.3694170047529042,
+      "COO": 1.4564995071850717
+    },
+    {
+      "atom": "dist_ratio",
+      "mode": "dqcp",
+      "RUST": 1.7067504959413782,
+      "SCIPY": 2.8882499973406084,
+      "CPP": 1.8070624937536195,
+      "COO": 2.325395995285362
+    },
+    {
+      "atom": "gen_lambda_max",
+      "mode": "dqcp",
+      "RUST": 2.5153960013994947,
+      "SCIPY": 3.6631874972954392,
+      "CPP": 2.7324374968884513,
+      "COO": 4.112166498089209
+    },
+    {
+      "atom": "condition_number",
+      "mode": "dqcp",
+      "RUST": 3.1992499934858643,
+      "SCIPY": 5.157729501661379,
+      "CPP": 3.470499999821186,
+      "COO": 5.823666499054525
+    }
+  ]
+}

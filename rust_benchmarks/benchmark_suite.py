@@ -1701,11 +1701,11 @@ def run_atom_sweep(backends: list[str], mode: str = "default", json_path: str | 
                 row[backend] = f"error: {type(e).__name__}"
         rows.append(row)
 
-    # Table: median ms per backend, plus speedup vs SCIPY where available
-    ref = "SCIPY" if "SCIPY" in backends else backends[0]
+    # Report every alternative relative to Rust: >1 means Rust is faster.
+    ref = "RUST" if "RUST" in backends else backends[0]
     others = [b for b in backends if b != ref]
     header = f"{'atom':<20}" + "".join(f"{b:>12}" for b in backends)
-    header += "".join(f"{f'{ref}/{b}':>12}" for b in others)
+    header += "".join(f"{f'{b}/{ref}':>12}" for b in others)
     print(header)
     print("-" * len(header))
     ratios: dict[str, list[float]] = {b: [] for b in others}
@@ -1715,9 +1715,10 @@ def run_atom_sweep(backends: list[str], mode: str = "default", json_path: str | 
             v = row[b]
             line += f"{v:>11.2f} " if isinstance(v, float) else f"{str(v or 'n/a')[:11]:>12}"
         for b in others:
-            v, r = row[b], row[ref]
-            if isinstance(v, float) and isinstance(r, float) and v > 0:
-                ratio = r / v
+            other_value, ref_value = row[b], row[ref]
+            if (isinstance(other_value, float) and isinstance(ref_value, float)
+                    and ref_value > 0):
+                ratio = other_value / ref_value
                 ratios[b].append(ratio)
                 line += f"{ratio:>11.2f}x"
             else:
@@ -1728,7 +1729,7 @@ def run_atom_sweep(backends: list[str], mode: str = "default", json_path: str | 
         if ratios[b]:
             geomean = float(np.exp(np.mean(np.log(ratios[b]))))
             worst = min(ratios[b])
-            print(f"{ref}/{b}: geomean {geomean:.2f}x | worst {worst:.2f}x "
+            print(f"{b}/{ref}: geomean {geomean:.2f}x | worst {worst:.2f}x "
                   f"| {sum(r > 1 for r in ratios[b])}/{len(ratios[b])} wins")
 
     if json_path:
