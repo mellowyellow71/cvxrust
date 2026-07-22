@@ -1,5 +1,9 @@
 # cvxpy/benchmarks results — Rust canon backend vs SciPy, C++ & COO
 
+> **Historical report (2026-07-03).** The current rebased results, expanded 124-atom
+> coverage, and corrected ASV tables are in `CVXPY_BENCHMARKS_RESULTS_REBASED.md`.
+> Do not use the values below as the current benchmark baseline.
+
 Run of the **official [cvxpy/benchmarks](https://github.com/cvxpy/benchmarks)** suite plus the
 in-repo synthetic suite, ASV backend suite, and the exhaustive per-atom sweep, comparing the Rust
 canonicalization backend head-to-head with the `SCIPY`, `CPP` (cvxcore), and `COO` backends.
