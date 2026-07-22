@@ -11,11 +11,11 @@ use std::sync::Arc;
 
 /// Helper to get item from either a list or tuple
 fn get_sequence_item<'py>(obj: &Bound<'py, PyAny>, index: usize) -> PyResult<Bound<'py, PyAny>> {
-    if let Ok(list) = obj.downcast::<PyList>() {
+    if let Ok(list) = obj.cast::<PyList>() {
         list.get_item(index)
-    } else if let Ok(tuple) = obj.downcast::<PyTuple>() {
+    } else if let Ok(tuple) = obj.cast::<PyTuple>() {
         tuple.get_item(index)
-    } else if let Ok(seq) = obj.downcast::<PySequence>() {
+    } else if let Ok(seq) = obj.cast::<PySequence>() {
         seq.get_item(index)
     } else {
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
@@ -27,11 +27,11 @@ fn get_sequence_item<'py>(obj: &Bound<'py, PyAny>, index: usize) -> PyResult<Bou
 
 /// Helper to get length of list or tuple
 fn get_sequence_len(obj: &Bound<'_, PyAny>) -> PyResult<usize> {
-    if let Ok(list) = obj.downcast::<PyList>() {
+    if let Ok(list) = obj.cast::<PyList>() {
         Ok(list.len())
-    } else if let Ok(tuple) = obj.downcast::<PyTuple>() {
+    } else if let Ok(tuple) = obj.cast::<PyTuple>() {
         Ok(tuple.len())
-    } else if let Ok(seq) = obj.downcast::<PySequence>() {
+    } else if let Ok(seq) = obj.cast::<PySequence>() {
         Ok(seq.len()?)
     } else {
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
@@ -239,7 +239,7 @@ impl LinOp {
 
         // Extract args recursively
         let args_list = obj.getattr("args")?;
-        let args_list = args_list.downcast::<PyList>()?;
+        let args_list = args_list.cast::<PyList>()?;
         let args: Vec<LinOp> = args_list
             .iter()
             .map(|arg| LinOp::from_python(&arg))
@@ -367,7 +367,7 @@ impl LinOp {
 
     /// Extract dense numpy array data
     fn extract_dense_array(data_attr: &Bound<'_, PyAny>) -> PyResult<LinOpData> {
-        let arr = data_attr.downcast::<PyArrayDyn<f64>>()?;
+        let arr = data_attr.cast::<PyArrayDyn<f64>>()?;
         let shape: Vec<usize> = arr.shape().to_vec();
         // CVXPY stores constants in F-order (column-major), so we need to read in F-order.
         // Call numpy's ravel with order='F' to get flattened data in column-major order.

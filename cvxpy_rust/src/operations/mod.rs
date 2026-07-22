@@ -102,7 +102,7 @@ pub fn process_linop(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 /// doing the same dispatch as `process_linop` but only counts entries,
 /// without allocating tensors or computing values.  The count is used to
 /// pre-allocate the output buffer with exact capacity.
-pub fn count_nnz(lin_op: &LinOp, ctx: &ProcessingContext) -> usize {
+pub fn count_nnz(lin_op: &LinOp, _ctx: &ProcessingContext) -> usize {
     match lin_op.op_type {
         // — Leaf nodes: exact counts —
         OpType::Variable => lin_op.size(),
@@ -123,26 +123,26 @@ pub fn count_nnz(lin_op: &LinOp, ctx: &ProcessingContext) -> usize {
 
         // — Pass-through ops: output nnz == arg nnz —
         OpType::Neg | OpType::Reshape | OpType::Div | OpType::Transpose => {
-            lin_op.args.first().map_or(0, |a| count_nnz(a, ctx))
+            lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx))
         }
 
         // — Aggregation ops: nnz preserved (rows remapped, not removed) —
         OpType::SumEntries | OpType::Trace | OpType::DiagVec
         | OpType::DiagMat | OpType::UpperTri => {
-            lin_op.args.first().map_or(0, |a| count_nnz(a, ctx))
+            lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx))
         }
 
         // — Combining ops: sum of children —
         OpType::Sum | OpType::Hstack | OpType::Vstack | OpType::Concatenate => {
-            lin_op.args.iter().map(|a| count_nnz(a, ctx)).sum()
+            lin_op.args.iter().map(|a| count_nnz(a, _ctx)).sum()
         }
 
         // — Index: upper bound = arg nnz (selecting rows can only reduce) —
-        OpType::Index => lin_op.args.first().map_or(0, |a| count_nnz(a, ctx)),
+        OpType::Index => lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx)),
 
         // — Promote / BroadcastTo: nnz multiplied by broadcast factor —
         OpType::Promote | OpType::BroadcastTo => {
-            let arg_nnz = lin_op.args.first().map_or(0, |a| count_nnz(a, ctx));
+            let arg_nnz = lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx));
             let arg_size = lin_op.args.first().map_or(1, |a| a.size().max(1));
             let output_size = lin_op.size();
             // broadcast factor = output_size / arg_size
@@ -158,18 +158,18 @@ pub fn count_nnz(lin_op: &LinOp, ctx: &ProcessingContext) -> usize {
             match &lin_op.data {
                 // Scalar * tensor scales entries in place: nnz == arg nnz
                 LinOpData::LinOpRef(ref inner) if inner.op_type == OpType::ScalarConst => {
-                    lin_op.args.first().map_or(0, |a| count_nnz(a, ctx))
+                    lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx))
                 }
-                LinOpData::LinOpRef(ref inner) => count_nnz(inner, ctx) * num_blocks,
+                LinOpData::LinOpRef(ref inner) => count_nnz(inner, _ctx) * num_blocks,
                 _ => lin_op.size() * num_blocks,
             }
         }
 
         // — MulElem: upper bound = min(arg_nnz, data_nnz * broadcast) —
         OpType::MulElem => {
-            let arg_nnz = lin_op.args.first().map_or(0, |a| count_nnz(a, ctx));
+            let arg_nnz = lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx));
             let data_nnz = match &lin_op.data {
-                LinOpData::LinOpRef(ref inner) => count_nnz(inner, ctx),
+                LinOpData::LinOpRef(ref inner) => count_nnz(inner, _ctx),
                 _ => arg_nnz,
             };
             // Elementwise mul can't produce more entries than arg has
@@ -183,7 +183,7 @@ pub fn count_nnz(lin_op: &LinOp, ctx: &ProcessingContext) -> usize {
                 LinOpData::LinOpRef(ref inner) => inner.size(),
                 _ => 1,
             };
-            let arg_nnz = lin_op.args.first().map_or(1, |a| count_nnz(a, ctx));
+            let arg_nnz = lin_op.args.first().map_or(1, |a| count_nnz(a, _ctx));
             data_size * arg_nnz
         }
 
@@ -193,7 +193,7 @@ pub fn count_nnz(lin_op: &LinOp, ctx: &ProcessingContext) -> usize {
                 LinOpData::LinOpRef(ref inner) => inner.size(),
                 _ => 1,
             };
-            let arg_nnz = lin_op.args.first().map_or(1, |a| count_nnz(a, ctx));
+            let arg_nnz = lin_op.args.first().map_or(1, |a| count_nnz(a, _ctx));
             data_size * arg_nnz
         }
 

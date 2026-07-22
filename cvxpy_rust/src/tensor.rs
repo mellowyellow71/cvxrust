@@ -374,7 +374,7 @@ impl BuildMatrixResult {
         // Convert 3D COO to 2D COO in-place
         // Output row = col * n_rows + row (column-major flattening)
         for i in 0..tensor.rows.len() {
-            tensor.rows[i] = tensor.cols[i] * n_rows_i64 + tensor.rows[i];
+            tensor.rows[i] += tensor.cols[i] * n_rows_i64;
         }
 
         // Sort entries by flattened row before returning. SciPy's COO->CSC

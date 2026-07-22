@@ -1111,16 +1111,47 @@ class TestRustBackendEndToEnd:
         diff = matrices[cp.SCIPY_CANON_BACKEND] - matrices[cp.RUST_CANON_BACKEND]
         assert diff.nnz == 0 or abs(diff).max() < 1e-12
 
-    def test_nd_parametric_matmul_raises(self):
-        """ND matmul with a Parameter operand is unsupported and raises clearly."""
+    @pytest.mark.parametrize("name,make_expr,param_shape", [
+        ("mul_batched", lambda x, p: p @ x, (2, 5, 3)),
+        ("mul_broadcast_2d", lambda x, p: p @ x, (5, 3)),
+        ("rmul_batched", lambda x, p: x @ p, (2, 4, 5)),
+        ("rmul_broadcast_2d", lambda x, p: x @ p, (4, 5)),
+    ])
+    def test_nd_parametric_matmul_matches_scipy(self, name, make_expr, param_shape):
+        """Parameterized ND matmul matches SCIPY across parameter updates."""
         import cvxpy as cp
 
         rng = np.random.default_rng(0)
         x = cp.Variable((2, 3, 4))
-        p = cp.Parameter((2, 5, 3), value=rng.standard_normal((2, 5, 3)))
-        problem = cp.Problem(cp.Minimize(cp.sum_squares((p @ x).flatten(order="F"))))
-        with pytest.raises(ValueError, match="ND parametric matmul is not supported"):
-            problem.get_problem_data(solver=cp.CLARABEL, canon_backend=cp.RUST_CANON_BACKEND)
+        p = cp.Parameter(param_shape)
+        expr = make_expr(x, p)
+        target = rng.standard_normal(expr.shape)
+        objective = cp.Minimize(cp.sum_squares((expr - target).flatten(order="F")))
+
+        values = [rng.standard_normal(param_shape), rng.standard_normal(param_shape)]
+        backend_data = {}
+        for backend in (cp.SCIPY_CANON_BACKEND, cp.RUST_CANON_BACKEND):
+            problem = cp.Problem(objective)
+            backend_data[backend] = []
+            for value in values:
+                p.value = value
+                data, *_ = problem.get_problem_data(
+                    solver=cp.CLARABEL, canon_backend=backend
+                )
+                backend_data[backend].append({
+                    "A": sparse.csc_matrix(data["A"]),
+                    "b": np.asarray(data["b"]),
+                    "c": np.asarray(data["c"]),
+                })
+
+        for scipy_data, rust_data in zip(
+            backend_data[cp.SCIPY_CANON_BACKEND],
+            backend_data[cp.RUST_CANON_BACKEND],
+        ):
+            diff = scipy_data["A"] - rust_data["A"]
+            assert diff.nnz == 0 or abs(diff).max() < 1e-12
+            assert np.allclose(scipy_data["b"], rust_data["b"], atol=1e-12)
+            assert np.allclose(scipy_data["c"], rust_data["c"], atol=1e-12)
 
     def test_order_c_unsupported(self):
         """build_matrix(order='C') raises: only column-major is implemented."""

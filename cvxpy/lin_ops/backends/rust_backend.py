@@ -116,6 +116,72 @@ def _nd_matmul_operator(op_type: str, const: LinOp, var_shape: tuple) -> sp.spar
     return _apply_nd_kron_structure_rmul(rhs, batch_size, m)
 
 
+def _nd_parametric_matmul_expansion(
+    op_type: str,
+    const_shape: tuple,
+    var_shape: tuple,
+) -> sp.csr_array:
+    """Map ``vec_F(const)`` to ``vec_F(M)`` for an ND matmul operator.
+
+    ``M`` is the two-dimensional operator satisfying
+    ``vec_F(result) = M @ vec_F(argument)``.  Each nonzero in ``M`` is one
+    entry of the parameterized constant, so this sparse map lets the normal
+    Rust parameter machinery construct ``M`` without evaluating Parameters
+    in Python.
+    """
+    const_size = int(np.prod(const_shape))
+
+    if op_type == "mul":
+        batch_size, n, _ = get_nd_matmul_dims(const_shape, var_shape)
+        m_dim = const_shape[-2] if len(const_shape) >= 2 else 1
+        k_dim = const_shape[-1]
+        out_size = batch_size * m_dim * n
+        in_size = batch_size * k_dim * n
+
+        batch, row, inner, column = np.meshgrid(
+            np.arange(batch_size),
+            np.arange(m_dim),
+            np.arange(k_dim),
+            np.arange(n),
+            indexing="ij",
+        )
+        operator_row = batch + batch_size * row + batch_size * m_dim * column
+        operator_col = batch + batch_size * inner + batch_size * k_dim * column
+        if is_batch_varying(const_shape):
+            parameter_col = batch + batch_size * row + batch_size * m_dim * inner
+        else:
+            parameter_col = row + m_dim * inner
+    else:
+        batch_size, m_dim, n_dim, _ = get_nd_rmul_dims(var_shape, const_shape)
+        k_dim = const_shape[-2] if len(const_shape) >= 2 else const_shape[0]
+        out_size = batch_size * m_dim * n_dim
+        in_size = batch_size * m_dim * k_dim
+
+        batch, row, inner, column = np.meshgrid(
+            np.arange(batch_size),
+            np.arange(m_dim),
+            np.arange(k_dim),
+            np.arange(n_dim),
+            indexing="ij",
+        )
+        operator_row = batch + batch_size * row + batch_size * m_dim * column
+        operator_col = batch + batch_size * row + batch_size * m_dim * inner
+        if is_batch_varying(const_shape):
+            parameter_col = batch + batch_size * inner + batch_size * k_dim * column
+        else:
+            parameter_col = inner + k_dim * column
+
+    expansion_row = operator_row + out_size * operator_col
+    nnz = expansion_row.size
+    return sp.csr_array(
+        (
+            np.ones(nnz, dtype=np.float64),
+            (expansion_row.ravel(), parameter_col.ravel()),
+        ),
+        shape=(out_size * in_size, const_size),
+    )
+
+
 def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
     """
     Serialize a list of LinOp trees into flat buffers for the Rust backend.
@@ -181,15 +247,31 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
         # F-order-flattened argument. Parents are unaffected: the node's rows
         # are the F-order entries of its value either way.
         data = lin_op.data
-        if data.type not in ("dense_const", "sparse_const"):
-            raise ValueError(
-                "ND parametric matmul is not supported by the RUST "
-                "canonicalization backend"
-            )
         arg = lin_op.args[0]
-        matrix = _nd_matmul_operator(lin_op.type, data, arg.shape)
         out_size = int(np.prod(lin_op.shape))
         in_size = int(np.prod(arg.shape))
+
+        if data.type not in ("dense_const", "sparse_const"):
+            expansion = _nd_parametric_matmul_expansion(
+                lin_op.type, data.shape, arg.shape
+            )
+
+            # Lower the ND operation to:
+            #   reshape(E @ vec_F(parameter), (out_size, in_size)) @ vec_F(arg)
+            # where E places and repeats parameter entries in the flattened
+            # two-dimensional matmul operator. All nodes use existing Rust
+            # kernels, including parameter-offset propagation.
+            extend((op_map["mul"], 1, out_size, 1, 6))
+            extend((op_map["reshape"], 2, out_size, in_size, 1, 0))
+            extend((op_map["mul"], 1, out_size * in_size, 1, 6))
+            _emit_sparse(op_map["sparse_const"], expansion.shape, 0, expansion)
+            extend((op_map["reshape"], 1, int(np.prod(data.shape)), 1, 0))
+            _serialize_node(data)
+            extend((op_map["reshape"], 1, in_size, 1, 0))
+            _serialize_node(arg)
+            return
+
+        matrix = _nd_matmul_operator(lin_op.type, data, arg.shape)
         if matrix.shape != (out_size, in_size):
             raise ValueError(
                 f"ND matmul operator shape {matrix.shape} does not match "

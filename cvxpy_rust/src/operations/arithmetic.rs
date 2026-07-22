@@ -677,7 +677,7 @@ fn as_plain_variable(lin_op: &LinOp) -> Option<i64> {
 /// Number of identity blocks for the Mul fast path: the variable's
 /// flattened size must tile exactly into the constant's column count.
 fn checked_num_blocks(arg_size: usize, a_cols: usize) -> Option<usize> {
-    if a_cols == 0 || arg_size % a_cols != 0 {
+    if a_cols == 0 || arg_size.rem_euclid(a_cols) != 0 {
         return None;
     }
     Some(arg_size / a_cols)
@@ -752,7 +752,7 @@ fn mul_const_by_variable(
                     }
                     result
                         .param_offsets
-                        .extend(std::iter::repeat(param_offset).take(a_rows * a_cols));
+                        .extend(std::iter::repeat_n(param_offset, a_rows * a_cols));
                 } else {
                     for c in 0..*a_cols {
                         let out_col = col_base + c as i64;
@@ -877,7 +877,8 @@ fn multiply_block_diagonal(
 }
 
 /// Dense block diagonal multiplication with column-major data: kron(I_k, A) @ tensor
-/// Direct element-by-element processing with pre-allocated output
+///
+/// Direct element-by-element processing with pre-allocated output.
 #[inline]
 fn multiply_dense_block_diagonal_colmajor(
     data: &[f64],
@@ -1085,7 +1086,8 @@ fn multiply_block_diagonal_right(
 /// - Input tensor represents vec(X) in column-major order
 /// - Output is vec(X @ A) in column-major order
 /// - The operation is kron(A^T, I_k) @ vec(X)
-/// Direct element-by-element processing with pre-allocated output
+///
+/// Direct element-by-element processing with pre-allocated output.
 #[inline]
 fn multiply_dense_block_diagonal_right_colmajor(
     data: &[f64],

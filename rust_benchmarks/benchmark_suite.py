@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import gc
+import inspect
 import json
 import os
 import platform
@@ -32,8 +33,9 @@ import subprocess
 import sys
 import textwrap
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import scipy
@@ -133,6 +135,7 @@ def capture_environment() -> dict:
     try:
         import cvxpy_rust
         env["cvxpy_rust_available"] = True
+        env["cvxpy_rust_path"] = cvxpy_rust.__file__
     except ImportError:
         env["cvxpy_rust_available"] = False
     return env
@@ -619,7 +622,8 @@ def _run_sweep(
     speedups: list[float] = []
 
     for val in axis_values:
-        factory = lambda v=val: problem_fn(v)
+        def factory(v=val):
+            return problem_fn(v)
         try:
             captured = extract_build_matrix_inputs(factory)
         except Exception as e:
@@ -651,7 +655,7 @@ def _run_sweep(
                 times[backend] = mean_t
                 sweep_data[backend].append(mean_t)
                 row += f" {mean_t:>8.2f}ms"
-            except Exception as e:
+            except Exception:
                 row += f" {'ERR':>10}"
                 sweep_data[backend].append(float("nan"))
 
@@ -963,8 +967,14 @@ def compare_results(file_a: str, file_b: str):
     print(f"{'=' * 70}")
     print("CROSS-MACHINE COMPARISON")
     print(f"{'=' * 70}")
-    print(f"Machine A: {env_a.get('cpu_brand', '?')} / {env_a.get('os', '?')} / BLAS: {env_a.get('blas', '?')}")
-    print(f"Machine B: {env_b.get('cpu_brand', '?')} / {env_b.get('os', '?')} / BLAS: {env_b.get('blas', '?')}")
+    print(
+        f"Machine A: {env_a.get('cpu_brand', '?')} / {env_a.get('os', '?')} / "
+        f"BLAS: {env_a.get('blas', '?')}"
+    )
+    print(
+        f"Machine B: {env_b.get('cpu_brand', '?')} / {env_b.get('os', '?')} / "
+        f"BLAS: {env_b.get('blas', '?')}"
+    )
 
     # Index results by problem name
     a_results = {r["problem"]: r for r in a.get("results", [])}
@@ -995,7 +1005,7 @@ def compare_results(file_a: str, file_b: str):
     # Summary
     a_summary = a.get("summary", {})
     b_summary = b.get("summary", {})
-    print(f"\nGeometric mean speedup:")
+    print("\nGeometric mean speedup:")
     print(f"  Machine A: {a_summary.get('geometric_mean_speedup', 'N/A')}")
     print(f"  Machine B: {b_summary.get('geometric_mean_speedup', 'N/A')}")
 
@@ -1072,7 +1082,7 @@ prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - b)))
                 t = _cold_start_measure(code, backend, samples)
                 times_by_backend[backend] = t
                 row += f" {np.mean(t):>7.1f}ms"
-            except Exception as e:
+            except Exception:
                 row += f" {'ERR':>10}"
 
         if len(backends) >= 2:
@@ -1117,7 +1127,171 @@ print((time.perf_counter() - start) * 1000)
 # for the ASV dashboard (which uses family-grouped cases instead).
 # ---------------------------------------------------------------------------
 
-def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
+
+def _make_huber_perspective_problem(n: int) -> cp.Problem:
+    x = cp.Variable(n)
+    scale = cp.Variable(nonneg=True)
+    return cp.Problem(
+        cp.Minimize(cp.sum(cp.huber(x, M=1.0, t=scale))),
+        [scale >= 0.5],
+    )
+
+
+def _make_perspective_problem(n: int) -> cp.Problem:
+    x = cp.Variable(n)
+    scale = cp.Variable(nonneg=True)
+    return cp.Problem(
+        cp.Minimize(cp.perspective(cp.sum_squares(x), scale)),
+        [scale >= 0.5],
+    )
+
+
+def _make_tr_inv_problem() -> cp.Problem:
+    x = cp.Variable((3, 3), PSD=True)
+    return cp.Problem(cp.Minimize(cp.tr_inv(x)), [x >> np.eye(3)])
+
+
+def _make_von_neumann_problem() -> cp.Problem:
+    x = cp.Variable((2, 2), PSD=True)
+    return cp.Problem(
+        cp.Maximize(cp.von_neumann_entr(x, (1, 1))),
+        [cp.trace(x) == 1],
+    )
+
+
+def _make_quantum_rel_entr_problem() -> cp.Problem:
+    x = cp.Variable((2, 2), PSD=True)
+    y = cp.Variable((2, 2), PSD=True)
+    return cp.Problem(
+        cp.Minimize(cp.quantum_rel_entr(x, y, (1, 1))),
+        [cp.trace(x) == 1, cp.trace(y) == 1],
+    )
+
+
+def _make_quantum_cond_entr_problem() -> cp.Problem:
+    rho = cp.Variable((4, 4), PSD=True)
+    return cp.Problem(
+        cp.Maximize(cp.quantum_cond_entr(rho, (2, 2), quad_approx=(1, 1))),
+        [cp.trace(rho) == 1],
+    )
+
+
+def _make_prod_problem() -> cp.Problem:
+    x = cp.Variable(4, pos=True)
+    return cp.Problem(cp.Maximize(cp.prod(x)), [x <= 2])
+
+
+def _make_cumprod_problem() -> cp.Problem:
+    x = cp.Variable(4, pos=True)
+    return cp.Problem(cp.Maximize(cp.prod(cp.cumprod(x))), [x <= 2])
+
+
+def _make_gmatmul_problem() -> cp.Problem:
+    x = cp.Variable(3, pos=True)
+    powers = np.array([[1.0, 2.0, 0.0], [0.0, 1.0, 1.0]])
+    return cp.Problem(cp.Minimize(cp.sum(cp.gmatmul(powers, x))), [x >= 1])
+
+
+def _make_one_minus_pos_problem() -> cp.Problem:
+    x = cp.Variable(pos=True)
+    return cp.Problem(cp.Maximize(x), [cp.one_minus_pos(x) >= 0.4])
+
+
+def _make_diff_pos_problem() -> cp.Problem:
+    x = cp.Variable(pos=True)
+    y = cp.Variable(pos=True)
+    return cp.Problem(cp.Maximize(x), [cp.diff_pos(y, x) >= 0.4, y == 1])
+
+
+def _make_eye_minus_inv_problem() -> cp.Problem:
+    x = cp.Variable((2, 2), pos=True)
+    constraints = [
+        cp.diag(x) == 0.1,
+        cp.hstack([x[0, 1], x[1, 0]]) == 0.1,
+    ]
+    return cp.Problem(cp.Minimize(cp.trace(cp.eye_minus_inv(x))), constraints)
+
+
+def _make_resolvent_problem() -> cp.Problem:
+    x = cp.Variable((2, 2), pos=True)
+    constraints = [
+        cp.diag(x) == 0.1,
+        cp.hstack([x[0, 1], x[1, 0]]) == 0.1,
+    ]
+    return cp.Problem(cp.Minimize(cp.trace(cp.resolvent(x, 2.0))), constraints)
+
+
+def _make_pf_eigenvalue_problem() -> cp.Problem:
+    x = cp.Variable((2, 2), pos=True)
+    return cp.Problem(cp.Minimize(cp.pf_eigenvalue(x)), [x >= 0.1, x <= 1])
+
+
+def _make_ceil_problem() -> cp.Problem:
+    x = cp.Variable()
+    return cp.Problem(cp.Minimize(cp.ceil(x)), [-2 <= x, x <= 2])
+
+
+def _make_floor_problem() -> cp.Problem:
+    x = cp.Variable()
+    return cp.Problem(cp.Minimize(-cp.floor(x)), [-2 <= x, x <= 2])
+
+
+def _make_sign_problem() -> cp.Problem:
+    x = cp.Variable()
+    return cp.Problem(cp.Minimize(cp.sign(x)), [-2 <= x, x <= 2])
+
+
+def _make_length_problem() -> cp.Problem:
+    x = cp.Variable(6)
+    return cp.Problem(cp.Minimize(cp.length(x)), [cp.norm(x) <= 2])
+
+
+def _make_dist_ratio_problem() -> cp.Problem:
+    x = cp.Variable(2)
+    return cp.Problem(
+        cp.Minimize(cp.dist_ratio(x, np.ones(2), np.zeros(2))),
+        [x <= 0.8],
+    )
+
+
+def _make_gen_lambda_max_problem() -> cp.Problem:
+    x = cp.Variable((2, 2))
+    y = cp.Variable((2, 2), PSD=True)
+    return cp.Problem(
+        cp.Minimize(cp.gen_lambda_max(x, y)),
+        [x == np.eye(2), y == 2 * np.eye(2)],
+    )
+
+
+def _make_condition_number_problem() -> cp.Problem:
+    x = cp.Variable((2, 2), PSD=True)
+    return cp.Problem(
+        cp.Minimize(cp.condition_number(x)),
+        [x[0, 0] == 2, x[1, 1] == 3, x[0, 1] == x[1, 0]],
+    )
+
+
+def _make_nd_parametric_matmul_problem() -> cp.Problem:
+    rng = np.random.default_rng(44)
+    x = cp.Variable((2, 3, 4))
+    parameter = cp.Parameter(
+        (2, 5, 3),
+        value=rng.standard_normal((2, 5, 3)),
+    )
+    expression = parameter @ x
+    return cp.Problem(cp.Minimize(cp.sum_squares(expression.flatten(order="F"))))
+
+@dataclass(frozen=True)
+class AtomBenchmarkCase:
+    name: str
+    factory: Callable[[], cp.Problem]
+    mode: str = "dcp"
+    solver: str = cp.CLARABEL
+    dqcp_threshold: float | None = None
+    supports_cpp: bool = True
+
+
+def make_atom_problems() -> list[AtomBenchmarkCase]:
     """One small problem per atom. Version-dependent atoms are skipped when absent."""
     rng = np.random.default_rng(42)
     n = 24
@@ -1149,15 +1323,44 @@ def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
     def x():
         return cp.Variable(n)
 
-    entries: list[tuple[str, Callable[[], cp.Problem]]] = []
+    entries: list[AtomBenchmarkCase] = []
 
-    def add(name, expr_fn, sense="min", requires=None):
+    def add(
+        name,
+        expr_fn,
+        sense="min",
+        requires=None,
+        solver=cp.CLARABEL,
+        supports_cpp=True,
+    ):
         if requires is not None and not hasattr(cp, requires):
             return
-        entries.append((name, prob(expr_fn, sense)))
+        entries.append(AtomBenchmarkCase(
+            name,
+            prob(expr_fn, sense),
+            solver=solver,
+            supports_cpp=supports_cpp,
+        ))
+
+    def add_problem(
+        name,
+        factory,
+        mode="dcp",
+        solver=cp.CLARABEL,
+        dqcp_threshold=None,
+        supports_cpp=True,
+    ):
+        entries.append(AtomBenchmarkCase(
+            name,
+            factory,
+            mode=mode,
+            solver=solver,
+            dqcp_threshold=dqcp_threshold,
+            supports_cpp=supports_cpp,
+        ))
 
     # --- affine / structural ---
-    add("neg", lambda: -X())
+    add("unary_neg", lambda: -X())
     add("sum", lambda: cp.sum(X()))
     add("sum_axis", lambda: cp.sum(X(), axis=1))
     add("cumsum", lambda: cp.cumsum(x()))
@@ -1173,10 +1376,15 @@ def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
     add("vec", lambda: _bench_vec(X()))
     add("promote", lambda: cp.Variable() + np.ones((6, 8)))
     add("broadcast_to", lambda: cp.broadcast_to(cp.Variable((1, 8)), (6, 8)),
-        requires="broadcast_to")
+        requires="broadcast_to", supports_cpp=False)
     add("hstack", lambda: cp.hstack([x(), x()]))
     add("vstack", lambda: cp.vstack([X(), X()]))
-    add("concatenate", lambda: cp.concatenate([X(), X()], axis=0), requires="concatenate")
+    add(
+        "concatenate",
+        lambda: cp.concatenate([X(), X()], axis=0),
+        requires="concatenate",
+        supports_cpp=False,
+    )
     add("bmat", lambda: cp.bmat([[X66(), X66()], [X66(), X66()]]))
     add("diag_vec", lambda: cp.diag(x()))
     add("diag_mat", lambda: cp.diag(X66()))
@@ -1184,20 +1392,65 @@ def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
     add("upper_tri", lambda: cp.upper_tri(X66()))
     add("kron_const_expr", lambda: cp.kron(np.eye(3), X66()))
     add("kron_expr_const", lambda: cp.kron(X66(), np.eye(3)))
-    add("conv", lambda: (cp.convolve if hasattr(cp, "convolve") else cp.conv)(kernel, x()))
-    add("einsum", lambda: cp.einsum("ij,jk->ik", c56, cp.Variable((6, 8))), requires="einsum")
+    add("convolve", lambda: (cp.convolve if hasattr(cp, "convolve") else cp.conv)(kernel, x()))
+    add(
+        "einsum",
+        lambda: cp.einsum("ij,jk->ik", c56, cp.Variable((6, 8))),
+        requires="einsum",
+        supports_cpp=False,
+    )
     add("partial_trace", lambda: cp.partial_trace(cp.Variable((16, 16)), dims=(4, 4), axis=0),
         requires="partial_trace")
     add("partial_transpose",
         lambda: cp.partial_transpose(cp.Variable((16, 16)), dims=(4, 4), axis=0),
         requires="partial_transpose")
-    add("nd_sum_axis", lambda: cp.sum(cp.Variable((2, 3, 4)), axis=(0, 2)))
-    add("nd_transpose", lambda: cp.transpose(cp.Variable((2, 3, 4)), axes=(2, 0, 1)))
+    add(
+        "nd_sum_axis",
+        lambda: cp.sum(cp.Variable((2, 3, 4)), axis=(0, 2)),
+        supports_cpp=False,
+    )
+    add(
+        "nd_transpose",
+        lambda: cp.transpose(cp.Variable((2, 3, 4)), axes=(2, 0, 1)),
+        supports_cpp=False,
+    )
+    add(
+        "nd_matmul",
+        lambda: rng.standard_normal((2, 5, 3)) @ cp.Variable((2, 3, 4)),
+        supports_cpp=False,
+    )
+    add_problem(
+        "nd_parametric_matmul",
+        _make_nd_parametric_matmul_problem,
+        supports_cpp=False,
+    )
+    add("outer", lambda: cp.outer(np.ones(6), cp.Variable(8)))
+    add("vdot", lambda: cp.vdot(np.ones(n), x()))
+    add("scalar_product", lambda: cp.scalar_product(np.ones(n), x()))
+    add("squeeze", lambda: cp.squeeze(cp.Variable((1, 6, 1))), supports_cpp=False)
+    add("swapaxes", lambda: cp.swapaxes(cp.Variable((2, 3, 4)), 0, 2), supports_cpp=False)
+    add("moveaxis", lambda: cp.moveaxis(cp.Variable((2, 3, 4)), 0, 2), supports_cpp=False)
+    add(
+        "permute_dims",
+        lambda: cp.permute_dims(cp.Variable((2, 3, 4)), (2, 0, 1)),
+        supports_cpp=False,
+    )
+    add("stack", lambda: cp.stack([X(), X()], axis=0), supports_cpp=False)
+    add("vec_to_upper_tri", lambda: cp.vec_to_upper_tri(cp.Variable(21)))
+    add("symmetric_wrap", lambda: cp.symmetric_wrap(X66()))
+    add("psd_wrap", lambda: cp.psd_wrap(S66()))
+    add("skew_symmetric_wrap", lambda: cp.skew_symmetric_wrap(X66()))
+    add("hermitian_wrap", lambda: cp.real(cp.hermitian_wrap(
+        cp.Variable((6, 6), hermitian=True)
+    )))
+    add("conj", lambda: cp.real(cp.conj(cp.Variable((6, 6), complex=True))))
+    add("real", lambda: cp.real(cp.Variable((6, 6), complex=True)))
+    add("imag", lambda: cp.imag(cp.Variable((6, 6), complex=True)))
 
     # --- elementwise ---
     add("abs", lambda: cp.abs(x()))
     add("pos", lambda: cp.pos(x()))
-    add("neg_part", lambda: cp.neg(x()))
+    add("neg", lambda: cp.neg(x()))
     add("square", lambda: cp.square(x()))
     add("sqrt", lambda: cp.sqrt(x()), sense="max")
     add("power_1_5", lambda: cp.power(x(), 1.5))
@@ -1206,6 +1459,7 @@ def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
     add("log1p", lambda: cp.log1p(x()), sense="max")
     add("entr", lambda: cp.entr(x()), sense="max")
     add("huber", lambda: cp.huber(x(), M=1.0))
+    add_problem("huber_perspective", lambda: _make_huber_perspective_problem(n))
     add("logistic", lambda: cp.logistic(x()))
     add("inv_pos", lambda: cp.inv_pos(x()))
     add("maximum", lambda: cp.maximum(x(), 0.5))
@@ -1213,6 +1467,9 @@ def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
     add("kl_div", lambda: cp.kl_div(x(), cp.Variable(n)))
     add("rel_entr", lambda: cp.rel_entr(x(), cp.Variable(n)), requires="rel_entr")
     add("xexp", lambda: cp.xexp(cp.Variable(n, nonneg=True)), requires="xexp")
+    add("log_normcdf", lambda: cp.log_normcdf(x()), sense="max")
+    add("loggamma", lambda: cp.loggamma(cp.Variable(n, pos=True)))
+    add("scalene", lambda: cp.scalene(x(), 2.0, 3.0))
 
     # --- reductions / matrix nonlinear ---
     add("norm1", lambda: cp.norm1(x()))
@@ -1241,6 +1498,44 @@ def make_atom_problems() -> list[tuple[str, Callable[[], cp.Problem]]]:
     add("ptp", lambda: cp.ptp(x()), requires="ptp")
     add("std", lambda: cp.std(x()), requires="std")
     add("cvar", lambda: cp.cvar(x(), 0.8), requires="cvar")
+    add("cummax", lambda: cp.cummax(x()))
+    add("mean", lambda: cp.mean(x()))
+    add("var", lambda: cp.var(x()))
+    add("sum_squares", lambda: cp.sum_squares(x()))
+    add("lambda_sum_largest", lambda: cp.lambda_sum_largest(S66(), 3))
+    add("lambda_sum_smallest", lambda: cp.lambda_sum_smallest(S66(), 3), sense="max")
+    add("inv_prod", lambda: cp.inv_prod(cp.Variable(8, pos=True)))
+    add_problem("perspective", lambda: _make_perspective_problem(n))
+    add_problem("tr_inv", _make_tr_inv_problem)
+    add_problem("von_neumann_entr", _make_von_neumann_problem, solver=cp.SCS)
+    add_problem("quantum_rel_entr", _make_quantum_rel_entr_problem, solver=cp.SCS)
+    add_problem("quantum_cond_entr", _make_quantum_cond_entr_problem, solver=cp.SCS)
+
+    # DGP-only atoms are compiled through the Dgp2Dcp reduction with gp=True.
+    add_problem("prod", _make_prod_problem, mode="dgp")
+    add_problem("cumprod", _make_cumprod_problem, mode="dgp")
+    add_problem("gmatmul", _make_gmatmul_problem, mode="dgp")
+    add_problem("one_minus_pos", _make_one_minus_pos_problem, mode="dgp")
+    add_problem("diff_pos", _make_diff_pos_problem, mode="dgp")
+    add_problem("eye_minus_inv", _make_eye_minus_inv_problem, mode="dgp")
+    add_problem("resolvent", _make_resolvent_problem, mode="dgp")
+    add_problem("pf_eigenvalue", _make_pf_eigenvalue_problem, mode="dgp")
+
+    # DQCP atoms are reduced to the same parameterized DCP feasibility
+    # problems that the bisection solver sends through a canon backend.
+    add_problem("ceil", _make_ceil_problem, mode="dqcp", dqcp_threshold=1.0)
+    add_problem("floor", _make_floor_problem, mode="dqcp", dqcp_threshold=1.0)
+    add_problem("sign", _make_sign_problem, mode="dqcp", dqcp_threshold=0.0)
+    add_problem("length", _make_length_problem, mode="dqcp", dqcp_threshold=3.0)
+    add_problem("dist_ratio", _make_dist_ratio_problem, mode="dqcp", dqcp_threshold=0.5)
+    add_problem(
+        "gen_lambda_max", _make_gen_lambda_max_problem,
+        mode="dqcp", dqcp_threshold=1.0,
+    )
+    add_problem(
+        "condition_number", _make_condition_number_problem,
+        mode="dqcp", dqcp_threshold=2.0,
+    )
 
     return entries
 
@@ -1259,24 +1554,144 @@ def _bench_vec(expr):
         return cp.vec(expr)
 
 
+_ATOM_EXPORT_ALIASES = {
+    "AddExpression": "sum",
+    "GeoMean": "geo_mean",
+    "GeoMeanApprox": "geo_mean",
+    "HuberAtom": "huber",
+    "HuberPerspectiveAtom": "huber_perspective",
+    "MatrixFrac": "matrix_frac",
+    "MulExpression": "matmul_const_left",
+    "Pnorm": "pnorm_1_5",
+    "PnormApprox": "pnorm_1_5",
+    "Power": "power_1_5",
+    "PowerApprox": "power_1_5",
+    "Prod": "prod",
+    "QuadForm": "quad_form",
+    "Sum": "sum",
+    "Trace": "trace",
+    "conv": "convolve",
+    "diag": "diag_vec",
+    "kron": "kron_const_expr",
+    "matmul": "matmul_const_left",
+    "norm": "norm2",
+    "normNuc": "norm_nuc",
+    "pnorm": "pnorm_1_5",
+    "power": "power_1_5",
+}
+
+_ATOM_EXPORT_HELPERS = {
+    "deep_flatten": "expression-list helper used by reshape, not an Atom",
+}
+
+
+def atom_export_inventory(entries: list[AtomBenchmarkCase]) -> dict[str, Any]:
+    """Account for every callable exported by ``cvxpy.atoms``."""
+    import cvxpy.atoms as cvxpy_atoms
+    from cvxpy.atoms.atom import Atom
+
+    benchmark_names = {case.name for case in entries}
+    exported = []
+    for name in sorted(item for item in dir(cvxpy_atoms) if not item.startswith("_")):
+        value = getattr(cvxpy_atoms, name)
+        is_atom_class = inspect.isclass(value) and issubclass(value, Atom)
+        is_atom_callable = (
+            callable(value)
+            and getattr(value, "__module__", "").startswith("cvxpy.atoms")
+        )
+        if is_atom_class or is_atom_callable:
+            exported.append(name)
+
+    direct = {name: name for name in exported if name in benchmark_names}
+    aliases = {
+        name: target for name, target in _ATOM_EXPORT_ALIASES.items()
+        if name in exported
+    }
+    helpers = {
+        name: reason for name, reason in _ATOM_EXPORT_HELPERS.items()
+        if name in exported
+    }
+
+    invalid_targets = sorted(set(aliases.values()) - benchmark_names)
+    if invalid_targets:
+        raise RuntimeError(f"Atom inventory aliases target missing cases: {invalid_targets}")
+
+    accounted = set(direct) | set(aliases) | set(helpers)
+    missing = sorted(set(exported) - accounted)
+    if missing:
+        raise RuntimeError(f"Unaccounted cvxpy.atoms exports: {missing}")
+
+    return {
+        "export_count": len(exported),
+        "direct": direct,
+        "aliases": aliases,
+        "helpers": helpers,
+    }
+
+
+def _compile_dqcp_atom(
+    problem: cp.Problem,
+    threshold: float,
+    solver: str,
+    backend: str,
+) -> None:
+    from cvxpy.reductions.dqcp2dcp.dqcp2dcp import Dqcp2Dcp
+
+    reduced, _ = Dqcp2Dcp(problem).apply(problem)
+    reduced._bisection_data.param.value = threshold
+    constraints = list(reduced.constraints)
+    for lazy_constraint in reduced._lazy_constraints:
+        constraint = lazy_constraint()
+        if constraint is not None:
+            constraints.append(constraint)
+    feasibility_problem = cp.Problem(cp.Minimize(0), constraints)
+    feasibility_problem.get_problem_data(
+        solver,
+        ignore_dpp=True,
+        canon_backend=backend,
+    )
+
+
+def _compile_atom_case(case: AtomBenchmarkCase, base: cp.Problem, backend: str) -> None:
+    if backend == "CPP" and not case.supports_cpp:
+        raise NotImplementedError(f"CPP does not support atom case {case.name!r}")
+    fresh = cp.Problem(base.objective, base.constraints)
+    if case.mode == "dqcp":
+        assert case.dqcp_threshold is not None
+        _compile_dqcp_atom(fresh, case.dqcp_threshold, case.solver, backend)
+        return
+    fresh.get_problem_data(
+        case.solver,
+        gp=case.mode == "dgp",
+        canon_backend=backend,
+    )
+
+
 def run_atom_sweep(backends: list[str], mode: str = "default", json_path: str | None = None):
     """Time get_problem_data for every atom problem on every backend."""
     reps = {"quick": 2, "default": 3, "thorough": 7}[mode]
     entries = make_atom_problems()
+    inventory = atom_export_inventory(entries)
     print(f"Atom sweep: {len(entries)} atoms x {len(backends)} backends "
           f"({reps} reps + 1 warmup each)\n")
+    print(
+        "Export inventory: "
+        f"{inventory['export_count']} callable exports = "
+        f"{len(inventory['direct'])} direct + "
+        f"{len(inventory['aliases'])} aliases + "
+        f"{len(inventory['helpers'])} helpers\n"
+    )
 
     rows = []
-    for name, factory in entries:
-        row = {"atom": name}
+    for case in entries:
+        row = {"atom": case.name, "mode": case.mode}
         for backend in backends:
             try:
-                base = factory()
+                base = case.factory()
                 samples = []
                 for i in range(reps + 1):
-                    fresh = cp.Problem(base.objective, base.constraints)
                     t0 = time.perf_counter()
-                    fresh.get_problem_data(cp.CLARABEL, canon_backend=backend)
+                    _compile_atom_case(case, base, backend)
                     if i > 0:  # first call is warmup
                         samples.append((time.perf_counter() - t0) * 1000)
                 row[backend] = float(np.median(samples))
@@ -1319,7 +1734,7 @@ def run_atom_sweep(backends: list[str], mode: str = "default", json_path: str | 
     if json_path:
         with open(json_path, "w") as f:
             json.dump({"kind": "atom_sweep", "backends": backends, "reps": reps,
-                       "results": rows}, f, indent=2)
+                       "inventory": inventory, "results": rows}, f, indent=2)
         print(f"\nJSON written to {json_path}")
 
 
