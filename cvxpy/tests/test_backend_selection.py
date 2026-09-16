@@ -17,7 +17,10 @@ import pytest
 import cvxpy as cp
 import cvxpy.settings as s
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeMatrixStuffing
-from cvxpy.reductions.solvers.solving_chain_utils import get_canon_backend
+from cvxpy.reductions.solvers.solving_chain_utils import (
+    get_canon_backend,
+    resolve_default_canon_backend,
+)
 
 
 class TestBackendSelectionDPP:
@@ -134,47 +137,40 @@ class TestBackendSelectionUserOverride:
 class TestBackendSelectionFallback:
     """Tests for SCIPY fallback when CPP doesn't work."""
 
-    def test_unsupported_cpp_atom_fallback_to_scipy(self):
-        """Problems with atoms that don't support CPP should fallback to SCIPY."""
+    def test_unsupported_cpp_atom_default_backend(self):
+        """CPP-unsupported atoms: a full-coverage default is used silently,
+        a CPP default warns and falls back to SCIPY."""
         x = cp.Variable((2, 3))
         # broadcast_to doesn't support CPP
         expr = cp.broadcast_to(x, (4, 2, 3))
         prob = cp.Problem(cp.Minimize(cp.sum(expr)), [x >= 0])
 
         assert not prob._supports_cpp()
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            backend = get_canon_backend(prob, None)
-
-        assert backend == s.SCIPY_CANON_BACKEND
-        assert len(w) == 1
-        assert "SCIPY" in str(w[0].message)
+        self._assert_default_routing(prob)
 
     def test_ndim_gt_2_default_backend(self):
-        """>2D problems route to RUST silently when available, else warn + SCIPY."""
+        """>2D problems: a full-coverage default is used silently,
+        a CPP default warns and falls back to SCIPY."""
         x = cp.Variable((2, 3, 4))  # 3D variable
         prob = cp.Problem(cp.Minimize(cp.sum(x)), [x >= 0])
 
         assert prob._max_ndim() > 2
+        self._assert_default_routing(prob)
 
-        try:
-            import cvxpy_rust  # noqa: F401
-            rust_available = True
-        except ImportError:
-            rust_available = False
-
+    @staticmethod
+    def _assert_default_routing(prob):
+        default = resolve_default_canon_backend()
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             backend = get_canon_backend(prob, None)
 
-        if rust_available:
-            assert backend == s.RUST_CANON_BACKEND
-            assert len(w) == 0
-        else:
+        if default == s.CPP_CANON_BACKEND:
             assert backend == s.SCIPY_CANON_BACKEND
             assert len(w) == 1
             assert "SCIPY" in str(w[0].message)
+        else:
+            assert backend == default
+            assert len(w) == 0
 
     def test_ndim_gt_2_user_override_respected(self):
         """User-specified COO for >2D problem should be respected."""

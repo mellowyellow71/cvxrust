@@ -6,21 +6,32 @@ from cvxpy.settings import (
 )
 from cvxpy.utilities.warn import warn
 
+# Backends that lower every LinOp canonicalization emits, including the N-D and
+# broadcast expressions the C++ core rejects.
+_FULL_COVERAGE_BACKENDS = frozenset(
+    {SCIPY_CANON_BACKEND, COO_CANON_BACKEND, RUST_CANON_BACKEND}
+)
 
-def _rust_backend_available() -> bool:
-    try:
-        import cvxpy_rust  # noqa: F401
-        return True
-    except ImportError:
-        return False
+
+def resolve_default_canon_backend() -> str:
+    """The backend used when the caller passes ``canon_backend=None``.
+
+    Honors the ``CVXPY_DEFAULT_CANON_BACKEND`` environment variable, then
+    ``settings.DEFAULT_CANON_BACKEND``.
+    """
+    # Local import: canonInterface pulls in the whole backend registry.
+    from cvxpy.cvxcore.python.canonInterface import get_default_canon_backend
+    return get_default_canon_backend()
 
 
 def get_canon_backend(problem, canon_backend: str) -> str:
     """
-    This function checks if the problem has expressions of dimension greater
-    than 2 or if it lacks C++ support, then raises a warning if the default
-    backend is not specified or raises an error if the backend is specified
-    as 'CPP'.
+    Resolve the canonicalization backend for ``problem``.
+
+    When no backend is requested and the default is a full-coverage backend
+    (SCIPY, COO or RUST) it is returned as is. Otherwise, if the problem has
+    expressions of dimension greater than 2 or lacks C++ support, this warns
+    and falls back to SCIPY, or raises if 'CPP' was requested explicitly.
 
     Parameters
     ----------
@@ -37,6 +48,12 @@ def get_canon_backend(problem, canon_backend: str) -> str:
         The canonicalization backend to use.
     """
 
+    if canon_backend is None:
+        default = resolve_default_canon_backend()
+        if default in _FULL_COVERAGE_BACKENDS:
+            # Nothing to fall back from: the default handles every expression.
+            return default
+
     if not problem._supports_cpp():
         if canon_backend is None:
             warn(
@@ -50,9 +67,6 @@ def get_canon_backend(problem, canon_backend: str) -> str:
 
     if problem._max_ndim() > 2:
         if canon_backend is None:
-            if _rust_backend_available():
-                # Use the Rust backend for n-dimensional problems (faster than SciPy)
-                return RUST_CANON_BACKEND
             warn(
                 f"The problem has an expression with dimension greater than 2. "
                 f"Defaulting to the {SCIPY_CANON_BACKEND} backend for canonicalization.")
