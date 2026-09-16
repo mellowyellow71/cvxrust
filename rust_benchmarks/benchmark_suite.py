@@ -494,10 +494,10 @@ def make_problems(sizes: str = "all") -> list[ProblemSpec]:
             c = np.random.randn(kernel_len)
             b = np.random.randn(sig_len + kernel_len - 1)
             x = cp.Variable(sig_len)
-            return cp.Problem(cp.Minimize(cp.sum_squares(cp.conv(c, x) - b)))
+            return cp.Problem(cp.Minimize(cp.sum_squares(cp.convolve(c, x) - b)))
         specs.append(ProblemSpec(
             f"convolution (len={sig_len})", "D: Specialized", factory, label,
-            ["conv", "sum_squares"],
+            ["convolve", "sum_squares"],
         ))
 
     # ---- Category E: Expression Depth ----
@@ -1386,13 +1386,20 @@ def make_atom_problems() -> list[AtomBenchmarkCase]:
         supports_cpp=False,
     )
     add("bmat", lambda: cp.bmat([[X66(), X66()], [X66(), X66()]]))
+    # cp.block (cvxpy#3482) lowers to concatenate, which the CPP backend rejects.
+    add(
+        "block",
+        lambda: cp.block([[X66(), X66()], [X66(), X66()]]),
+        requires="block",
+        supports_cpp=False,
+    )
     add("diag_vec", lambda: cp.diag(x()))
     add("diag_mat", lambda: cp.diag(X66()))
     add("trace", lambda: cp.trace(X66()))
     add("upper_tri", lambda: cp.upper_tri(X66()))
     add("kron_const_expr", lambda: cp.kron(np.eye(3), X66()))
     add("kron_expr_const", lambda: cp.kron(X66(), np.eye(3)))
-    add("convolve", lambda: (cp.convolve if hasattr(cp, "convolve") else cp.conv)(kernel, x()))
+    add("convolve", lambda: cp.convolve(kernel, x()))
     add(
         "einsum",
         lambda: cp.einsum("ij,jk->ik", c56, cp.Variable((6, 8))),
