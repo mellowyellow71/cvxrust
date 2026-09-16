@@ -311,10 +311,8 @@ pub fn process_upper_tri(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTenso
     }
 
     // Select upper triangular entries and renumber
-    let mut result = SparseTensor::with_capacity(
-        (out_rows, ctx.var_length as usize + 1),
-        tensor.nnz() / 2,
-    );
+    let mut result =
+        SparseTensor::with_capacity((out_rows, ctx.var_length as usize + 1), tensor.nnz() / 2);
 
     for i in 0..tensor.nnz() {
         let row = tensor.rows[i] as usize;

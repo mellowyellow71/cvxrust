@@ -127,10 +127,11 @@ pub fn count_nnz(lin_op: &LinOp, _ctx: &ProcessingContext) -> usize {
         }
 
         // — Aggregation ops: nnz preserved (rows remapped, not removed) —
-        OpType::SumEntries | OpType::Trace | OpType::DiagVec
-        | OpType::DiagMat | OpType::UpperTri => {
-            lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx))
-        }
+        OpType::SumEntries
+        | OpType::Trace
+        | OpType::DiagVec
+        | OpType::DiagMat
+        | OpType::UpperTri => lin_op.args.first().map_or(0, |a| count_nnz(a, _ctx)),
 
         // — Combining ops: sum of children —
         OpType::Sum | OpType::Hstack | OpType::Vstack | OpType::Concatenate => {
@@ -153,7 +154,9 @@ pub fn count_nnz(lin_op: &LinOp, _ctx: &ProcessingContext) -> usize {
         // NOTE: the Mul(Const, Variable) fast path in arithmetic.rs emits
         // exactly data_nnz * num_blocks entries — keep these in sync.
         OpType::Mul | OpType::Rmul => {
-            let num_blocks = lin_op.args.first()
+            let num_blocks = lin_op
+                .args
+                .first()
                 .map_or(1, |a| a.shape.get(1).copied().unwrap_or(1));
             match &lin_op.data {
                 // Scalar * tensor scales entries in place: nnz == arg nnz
@@ -173,7 +176,8 @@ pub fn count_nnz(lin_op: &LinOp, _ctx: &ProcessingContext) -> usize {
                 _ => arg_nnz,
             };
             // Elementwise mul can't produce more entries than arg has
-            arg_nnz.min(data_nnz * lin_op.size() / lin_op.args.first().map_or(1, |a| a.size().max(1)))
+            arg_nnz
+                .min(data_nnz * lin_op.size() / lin_op.args.first().map_or(1, |a| a.size().max(1)))
                 .max(arg_nnz) // safety: never less than 0
         }
 

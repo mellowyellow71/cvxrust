@@ -50,7 +50,11 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     }
 
     // Get constant data tensor
-    let t0 = if profile { Some(std::time::Instant::now()) } else { None };
+    let t0 = if profile {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
     let lhs_data = get_constant_matrix_data(lhs_linop, Some(ctx));
     let extract_ms = t0.map(|t| t.elapsed().as_secs_f64() * 1000.0);
 
@@ -76,7 +80,11 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     let rhs = process_linop(&lin_op.args[0], ctx);
 
     // Perform block diagonal multiplication
-    let t1 = if profile { Some(std::time::Instant::now()) } else { None };
+    let t1 = if profile {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
     let result = multiply_block_diagonal(&lhs_data, &rhs, lin_op, ctx, false);
     let multiply_ms = t1.map(|t| t.elapsed().as_secs_f64() * 1000.0);
 
@@ -87,7 +95,11 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
             ConstantMatrix::DenseRowMajor { rows, cols, .. } => ("dense", *rows, *cols),
             ConstantMatrix::Sparse { rows, cols, .. } => ("sparse", *rows, *cols),
         };
-        let n_blocks = if lhs_cols > 0 { rhs.shape.0 / lhs_cols } else { 0 };
+        let n_blocks = if lhs_cols > 0 {
+            rhs.shape.0 / lhs_cols
+        } else {
+            0
+        };
         eprintln!(
             "[cvxpy_rust] process_mul: extract={:.3}ms, multiply={:.3}ms ({} {}x{}, {} block{})",
             extract_ms.unwrap_or(0.0),

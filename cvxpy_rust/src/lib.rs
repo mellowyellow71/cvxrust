@@ -108,7 +108,11 @@ fn build_matrix_serialized<'py>(
     // question): how much of a call is spent deserializing nodes vs building.
     // See rust_benchmarks/FFI_OVERHEAD_ANALYSIS.md for measured results.
     let profile = std::env::var("CVXPY_RUST_FFI_PROFILE").as_deref() == Ok("1");
-    let t0 = if profile { Some(std::time::Instant::now()) } else { None };
+    let t0 = if profile {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
 
     // Get numpy array slices (zero-copy view into Python memory)
     let meta_slice = node_meta.as_slice()?;
@@ -123,7 +127,11 @@ fn build_matrix_serialized<'py>(
     }
 
     let deser_ms = t0.map(|t| t.elapsed().as_secs_f64() * 1000.0);
-    let t1 = if profile { Some(std::time::Instant::now()) } else { None };
+    let t1 = if profile {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
 
     // Build the matrix (release GIL during computation)
     let result = py.detach(|| {

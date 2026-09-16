@@ -374,7 +374,10 @@ impl LinOp {
         // This handles non-contiguous arrays (views, slices) correctly.
         let flat_arr = data_attr.call_method1("ravel", ("F",))?;
         let data: Vec<f64> = flat_arr.extract()?;
-        Ok(LinOpData::DenseArray { data: Arc::from(data), shape })
+        Ok(LinOpData::DenseArray {
+            data: Arc::from(data),
+            shape,
+        })
     }
 
     /// Extract sparse scipy matrix data (assumes CSC format)
@@ -630,7 +633,11 @@ impl<'a> DeserializationContext<'a> {
                 // ConcatAxis: [has, value]
                 let has = self.next()?;
                 let value = self.next()?;
-                Ok(LinOpData::ConcatAxis(if has != 0 { Some(value) } else { None }))
+                Ok(LinOpData::ConcatAxis(if has != 0 {
+                    Some(value)
+                } else {
+                    None
+                }))
             }
 
             _ => Err(pyo3::exceptions::PyValueError::new_err(format!(

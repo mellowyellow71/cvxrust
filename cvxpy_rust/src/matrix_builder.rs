@@ -61,10 +61,7 @@ pub fn build_matrix_internal(
 
     // Phase 1 (structure pass): count exact non-zeros per constraint
     // for precise pre-allocation and parallelization decisions.
-    let per_constraint_nnz: Vec<usize> = lin_ops
-        .iter()
-        .map(|l| count_nnz(l, &ctx))
-        .collect();
+    let per_constraint_nnz: Vec<usize> = lin_ops.iter().map(|l| count_nnz(l, &ctx)).collect();
     let total_nnz: usize = per_constraint_nnz.iter().sum();
 
     // Process constraints (parallel or sequential based on count AND work)
@@ -73,21 +70,9 @@ pub fn build_matrix_internal(
         lin_ops.len() >= PARALLEL_MIN_CONSTRAINTS && total_nnz >= PARALLEL_MIN_WORK;
 
     let combined = if should_parallelize {
-        process_constraints_parallel(
-            lin_ops,
-            &row_offsets,
-            &ctx,
-            total_nnz,
-            total_rows,
-        )
+        process_constraints_parallel(lin_ops, &row_offsets, &ctx, total_nnz, total_rows)
     } else {
-        process_constraints_sequential(
-            lin_ops,
-            &row_offsets,
-            &ctx,
-            total_nnz,
-            total_rows,
-        )
+        process_constraints_sequential(lin_ops, &row_offsets, &ctx, total_nnz, total_rows)
     };
 
     BuildMatrixResult::from_tensor(combined, param_size_plus_one as usize)

@@ -260,7 +260,6 @@ impl SparseTensor {
 
         result
     }
-
 }
 
 /// Builder for SparseTensor with efficient accumulation
