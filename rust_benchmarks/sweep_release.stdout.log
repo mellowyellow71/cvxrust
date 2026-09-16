@@ -1,0 +1,82 @@
+>>> LeastSquares (simple_QP_benchmarks.py)
+RESULT {"class": "LeastSquares", "module": "simple_QP_benchmarks.py", "backend": "RUST", "median_ms": 800.048, "samples_ms": [789.778, 810.319], "status": "ok"}
+RESULT {"class": "LeastSquares", "module": "simple_QP_benchmarks.py", "backend": "SCIPY", "median_ms": 1419.19, "samples_ms": [1420.539, 1417.841], "status": "ok"}
+RESULT {"class": "LeastSquares", "module": "simple_QP_benchmarks.py", "backend": "CPP", "median_ms": 979.602, "samples_ms": [987.621, 971.583], "status": "ok"}
+>>> SimpleQPBenchmark (simple_QP_benchmarks.py)
+RESULT {"class": "SimpleQPBenchmark", "module": "simple_QP_benchmarks.py", "backend": "RUST", "median_ms": 792.726, "samples_ms": [796.38, 789.072], "status": "ok"}
+RESULT {"class": "SimpleQPBenchmark", "module": "simple_QP_benchmarks.py", "backend": "SCIPY", "median_ms": 1607.109, "samples_ms": [1634.525, 1579.694], "status": "ok"}
+RESULT {"class": "SimpleQPBenchmark", "module": "simple_QP_benchmarks.py", "backend": "CPP", "median_ms": 1518.855, "samples_ms": [1528.581, 1509.128], "status": "ok"}
+>>> UnconstrainedQP (simple_QP_benchmarks.py)
+RESULT {"class": "UnconstrainedQP", "module": "simple_QP_benchmarks.py", "backend": "RUST", "median_ms": 3890.014, "samples_ms": [4130.672, 3649.357], "status": "ok"}
+RESULT {"class": "UnconstrainedQP", "module": "simple_QP_benchmarks.py", "backend": "SCIPY", "median_ms": 1023.297, "samples_ms": [1042.644, 1003.949], "status": "ok"}
+RESULT {"class": "UnconstrainedQP", "module": "simple_QP_benchmarks.py", "backend": "CPP", "median_ms": 1236.338, "samples_ms": [1232.194, 1240.483], "status": "ok"}
+>>> ParametrizedQPBenchmark (simple_QP_benchmarks.py)
+RESULT {"class": "ParametrizedQPBenchmark", "module": "simple_QP_benchmarks.py", "backend": "RUST", "median_ms": 1659.214, "samples_ms": [1662.935, 1655.494], "status": "ok"}
+>>> SimpleLPBenchmark (simple_LP_benchmarks.py)
+RESULT {"class": "SimpleLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "RUST", "median_ms": 3060.998, "samples_ms": [3064.823, 3057.172], "status": "ok"}
+RESULT {"class": "SimpleLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "SCIPY", "median_ms": 5463.709, "samples_ms": [5523.991, 5403.426], "status": "ok"}
+RESULT {"class": "SimpleLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "CPP", "median_ms": 5684.884, "samples_ms": [5674.811, 5694.957], "status": "ok"}
+>>> SimpleScalarParametrizedLPBenchmark (simple_LP_benchmarks.py)
+RESULT {"class": "SimpleScalarParametrizedLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "RUST", "median_ms": 704.995, "samples_ms": [712.016, 697.973], "status": "ok"}
+RESULT {"class": "SimpleScalarParametrizedLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "SCIPY", "median_ms": 1013.23, "samples_ms": [1019.273, 1007.187], "status": "ok"}
+RESULT {"class": "SimpleScalarParametrizedLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "CPP", "median_ms": 1074.217, "samples_ms": [1071.74, 1076.694], "status": "ok"}
+>>> SimpleFullyParametrizedLPBenchmark (simple_LP_benchmarks.py)
+RESULT {"class": "SimpleFullyParametrizedLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "RUST", "median_ms": 333.558, "samples_ms": [338.097, 329.019], "status": "ok"}
+RESULT {"class": "SimpleFullyParametrizedLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "SCIPY", "median_ms": 515.326, "samples_ms": [518.991, 511.662], "status": "ok"}
+>>> CVaRBenchmark (finance.py)
+RESULT {"class": "CVaRBenchmark", "module": "finance.py", "backend": "RUST", "median_ms": 5865.968, "samples_ms": [5982.2, 5749.737], "status": "ok"}
+RESULT {"class": "CVaRBenchmark", "module": "finance.py", "backend": "SCIPY", "median_ms": 6191.107, "samples_ms": [6405.318, 5976.895], "status": "ok"}
+RESULT {"class": "CVaRBenchmark", "module": "finance.py", "backend": "CPP", "median_ms": 7899.28, "samples_ms": [8151.719, 7646.842], "status": "ok"}
+>>> FactorCovarianceModel (finance.py)
+RESULT {"class": "FactorCovarianceModel", "module": "finance.py", "backend": "RUST", "median_ms": 606.836, "samples_ms": [600.679, 612.994], "status": "ok"}
+RESULT {"class": "FactorCovarianceModel", "module": "finance.py", "backend": "SCIPY", "median_ms": 1024.318, "samples_ms": [1050.314, 998.323], "status": "ok"}
+RESULT {"class": "FactorCovarianceModel", "module": "finance.py", "backend": "CPP", "median_ms": 969.865, "samples_ms": [971.504, 968.226], "status": "ok"}
+>>> Yitzhaki (gini_portfolio.py)
+RESULT {"class": "Yitzhaki", "module": "gini_portfolio.py", "backend": "RUST", "median_ms": 535.696, "samples_ms": [543.733, 527.66], "status": "ok"}
+RESULT {"class": "Yitzhaki", "module": "gini_portfolio.py", "backend": "SCIPY", "median_ms": 857.133, "samples_ms": [860.869, 853.397], "status": "ok"}
+RESULT {"class": "Yitzhaki", "module": "gini_portfolio.py", "backend": "CPP", "median_ms": 785.051, "samples_ms": [786.986, 783.115], "status": "ok"}
+>>> Murray (gini_portfolio.py)
+RESULT {"class": "Murray", "module": "gini_portfolio.py", "backend": "RUST", "median_ms": 2594.81, "samples_ms": [2559.215, 2630.406], "status": "ok"}
+RESULT {"class": "Murray", "module": "gini_portfolio.py", "backend": "SCIPY", "median_ms": 1077.309, "samples_ms": [1077.185, 1077.432], "status": "ok"}
+RESULT {"class": "Murray", "module": "gini_portfolio.py", "backend": "CPP", "median_ms": 994.425, "samples_ms": [995.868, 992.982], "status": "ok"}
+>>> Cajas (gini_portfolio.py)
+RESULT {"class": "Cajas", "module": "gini_portfolio.py", "backend": "RUST", "median_ms": 341.979, "samples_ms": [336.096, 347.862], "status": "ok"}
+RESULT {"class": "Cajas", "module": "gini_portfolio.py", "backend": "SCIPY", "median_ms": 647.388, "samples_ms": [654.654, 640.123], "status": "ok"}
+RESULT {"class": "Cajas", "module": "gini_portfolio.py", "backend": "CPP", "median_ms": 1759.651, "samples_ms": [1750.203, 1769.098], "status": "ok"}
+>>> ConvexPlasticity (high_dim_convex_plasticity.py)
+RESULT {"class": "ConvexPlasticity", "module": "high_dim_convex_plasticity.py", "backend": "RUST", "median_ms": 2994.589, "samples_ms": [3085.488, 2903.69], "status": "ok"}
+RESULT {"class": "ConvexPlasticity", "module": "high_dim_convex_plasticity.py", "backend": "SCIPY", "median_ms": 19774.382, "samples_ms": [19536.704, 20012.061], "status": "ok"}
+RESULT {"class": "ConvexPlasticity", "module": "high_dim_convex_plasticity.py", "backend": "CPP", "median_ms": 3447.275, "samples_ms": [3383.658, 3510.893], "status": "ok"}
+>>> HuberRegression (huber_regression.py)
+RESULT {"class": "HuberRegression", "module": "huber_regression.py", "backend": "RUST", "median_ms": 1787.848, "samples_ms": [1804.44, 1771.256], "status": "ok"}
+RESULT {"class": "HuberRegression", "module": "huber_regression.py", "backend": "SCIPY", "median_ms": 2533.038, "samples_ms": [2545.503, 2520.574], "status": "ok"}
+RESULT {"class": "HuberRegression", "module": "huber_regression.py", "backend": "CPP", "median_ms": 2402.442, "samples_ms": [2394.33, 2410.553], "status": "ok"}
+>>> QuantumHilbertMatrix (quantum_hilbert_matrix.py)
+RESULT {"class": "QuantumHilbertMatrix", "module": "quantum_hilbert_matrix.py", "backend": "RUST", "median_ms": 1369.056, "samples_ms": [1367.734, 1370.378], "status": "ok"}
+RESULT {"class": "QuantumHilbertMatrix", "module": "quantum_hilbert_matrix.py", "backend": "SCIPY", "median_ms": 810.683, "samples_ms": [818.788, 802.578], "status": "ok"}
+RESULT {"class": "QuantumHilbertMatrix", "module": "quantum_hilbert_matrix.py", "backend": "CPP", "median_ms": 943.977, "samples_ms": [932.645, 955.308], "status": "ok"}
+>>> SDPSegfault1132Benchmark (sdp_segfault_1132_benchmark.py)
+RESULT {"class": "SDPSegfault1132Benchmark", "module": "sdp_segfault_1132_benchmark.py", "backend": "RUST", "median_ms": 31278.059, "samples_ms": [32880.171, 29675.948], "status": "ok"}
+RESULT {"class": "SDPSegfault1132Benchmark", "module": "sdp_segfault_1132_benchmark.py", "backend": "SCIPY", "median_ms": 1377.121, "samples_ms": [1442.233, 1312.009], "status": "ok"}
+RESULT {"class": "SDPSegfault1132Benchmark", "module": "sdp_segfault_1132_benchmark.py", "backend": "CPP", "median_ms": 6984.796, "samples_ms": [6984.916, 6984.677], "status": "ok"}
+>>> OptimalAdvertising (optimal_advertising.py)
+RESULT {"class": "OptimalAdvertising", "module": "optimal_advertising.py", "backend": "RUST", "median_ms": 265.489, "samples_ms": [269.088, 261.89], "status": "ok"}
+RESULT {"class": "OptimalAdvertising", "module": "optimal_advertising.py", "backend": "SCIPY", "median_ms": 537.788, "samples_ms": [536.329, 539.248], "status": "ok"}
+RESULT {"class": "OptimalAdvertising", "module": "optimal_advertising.py", "backend": "CPP", "median_ms": 1836.164, "samples_ms": [1795.449, 1876.878], "status": "ok"}
+>>> SemidefiniteProgramming (semidefinite_programming.py)
+RESULT {"class": "SemidefiniteProgramming", "module": "semidefinite_programming.py", "backend": "RUST", "median_ms": 336.308, "samples_ms": [330.577, 342.038], "status": "ok"}
+RESULT {"class": "SemidefiniteProgramming", "module": "semidefinite_programming.py", "backend": "SCIPY", "median_ms": 634.095, "samples_ms": [647.892, 620.298], "status": "ok"}
+RESULT {"class": "SemidefiniteProgramming", "module": "semidefinite_programming.py", "backend": "CPP", "median_ms": 774.557, "samples_ms": [773.168, 775.946], "status": "ok"}
+>>> SlowPruningBenchmark (slow_pruning_1668_benchmark.py)
+RESULT {"class": "SlowPruningBenchmark", "module": "slow_pruning_1668_benchmark.py", "backend": "RUST", "median_ms": 1409.955, "samples_ms": [1418.216, 1401.694], "status": "ok"}
+RESULT {"class": "SlowPruningBenchmark", "module": "slow_pruning_1668_benchmark.py", "backend": "SCIPY", "median_ms": 1920.141, "samples_ms": [1934.255, 1906.026], "status": "ok"}
+RESULT {"class": "SlowPruningBenchmark", "module": "slow_pruning_1668_benchmark.py", "backend": "CPP", "median_ms": 1546.563, "samples_ms": [1556.881, 1536.244], "status": "ok"}
+>>> SVMWithL1Regularization (svm_l1_regularization.py)
+RESULT {"class": "SVMWithL1Regularization", "module": "svm_l1_regularization.py", "backend": "RUST", "median_ms": 1649.355, "samples_ms": [1666.791, 1631.919], "status": "ok"}
+RESULT {"class": "SVMWithL1Regularization", "module": "svm_l1_regularization.py", "backend": "SCIPY", "median_ms": 2341.155, "samples_ms": [2323.292, 2359.018], "status": "ok"}
+RESULT {"class": "SVMWithL1Regularization", "module": "svm_l1_regularization.py", "backend": "CPP", "median_ms": 2361.517, "samples_ms": [2370.534, 2352.5], "status": "ok"}
+>>> TvInpainting (tv_inpainting.py)
+RESULT {"class": "TvInpainting", "module": "tv_inpainting.py", "backend": "RUST", "median_ms": 959.186, "samples_ms": [998.466, 919.905], "status": "ok"}
+RESULT {"class": "TvInpainting", "module": "tv_inpainting.py", "backend": "SCIPY", "median_ms": 789.84, "samples_ms": [809.225, 770.455], "status": "ok"}
+RESULT {"class": "TvInpainting", "module": "tv_inpainting.py", "backend": "CPP", "median_ms": 783.653, "samples_ms": [783.336, 783.969], "status": "ok"}
+=== done -> /Users/revantkasichainula/cvxpy/rust_benchmarks/results.jsonl ===

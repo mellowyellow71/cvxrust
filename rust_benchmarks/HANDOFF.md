@@ -1,5 +1,15 @@
 # CVXRust project handoff
 
+> **Current entrypoint (2026-07-22):** this checkout is the preserved
+> `ray/latestfixes` worktree, and the detailed body below is historical. Continue from
+> `/Users/revantkasichainula/cvxpy/rust_benchmarks/cvxpy-rebased` on local branch
+> `codex/rust-rebase-20260720`, backed up as
+> `mellowyellow71/cvxrust:rust-rebase-20260720`. Its
+> `rust_benchmarks/HANDOFF.md` contains the current branches, completed validation,
+> 124-atom results, parameterized ND matmul status, safe benchmark workflow, and next
+> actions. The clean backend payload is
+> `mellowyellow71/cvxrust:rust-backend-pr-20260721`; no backend PR is open.
+
 Last updated 2026-07-08 (session of 2026-07-02 → 07-08). Written for the next agent/session
 picking this project up. Read this top to bottom before touching anything; the Pitfalls
 section will save you real time. Ray (GitHub `mellowyellow71`) is the human owner;

@@ -1,0 +1,1 @@
+RESULT {"class": "SimpleFullyParametrizedLPBenchmark", "module": "simple_LP_benchmarks.py", "backend": "COO", "median_ms": 450.583, "samples_ms": [446.603, 450.583, 452.438], "status": "ok"}

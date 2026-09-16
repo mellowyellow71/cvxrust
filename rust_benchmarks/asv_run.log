@@ -1,0 +1,236 @@
+· No information stored about machine 'Revants-MacBook-Pro.local'. I know about nothing.
+  
+
+I will now ask you some questions about this machine to identify it in the benchmarks.
+
+1. machine:  A unique name to identify this machine in the results.
+   May be anything, as long as it is unique across all the machines
+   used to benchmark this project.  NOTE: If changed from the default,
+   it will no longer match the hostname of this machine, and you may
+   need to explicitly use the --machine argument to asv.
+machine [Revants-MacBook-Pro.local]: 2. os:  The OS type and version of this machine.  For example,
+   'Macintosh OS-X 10.8'.
+os [Darwin 25.5.0]: 3. arch:  The generic CPU architecture of this machine.  For example,
+   'i386' or 'x86_64'.
+arch [arm64]: 4. cpu:  A specific description of the CPU of this machine, including
+   its speed and class.  For example, 'Intel(R) Core(TM) i5-2520M CPU
+   @ 2.50GHz (4 cores)'.
+cpu [Apple M3 Pro]: 5. num_cpu:  The number of CPUs in the system. For example, '4'.
+num_cpu [11]: 6. ram:  The amount of physical RAM on this machine.  For example,
+   '4GB'.
+ram [19327352832]: · Discovering benchmarks
+· Running 4 total benchmarks (1 commits * 1 environments * 4 benchmarks)
+[  0.00%] · For cvxpy commit 7bf07625 <alan/rust-backend-1.9>:
+[  0.00%] ·· Building for existing-py_Users_revantkasichainula_cvxpy_.venv_bin_python
+[  0.00%] ·· Benchmarking existing-py_Users_revantkasichainula_cvxpy_.venv_bin_python
+[ 12.50%] ··· Running (canonicalization_backends.BackendBuildMatrixCanonicalization.time_build_matrix--).
+[ 25.00%] ··· Running (canonicalization_backends.BackendCompileCanonicalization.time_get_problem_data--).
+[ 37.50%] ··· Running (canonicalization_backends.DeepExpressionTreeScaling.time_get_problem_data--)..
+[ 62.50%] ··· ...uildMatrixCanonicalization.time_build_matrix                 ok
+[ 62.50%] ··· ============================== ========= =============
+                        case_name             backend               
+              ------------------------------ --------- -------------
+                    core_affine_atoms          SCIPY     68.8±0.4μs 
+                    core_affine_atoms           COO      41.4±0.1μs 
+                    core_affine_atoms           CPP      35.4±0.1μs 
+                    core_affine_atoms           RUST     24.8±0.1μs 
+                  matmul_multiply_divide       SCIPY     68.8±0.4μs 
+                  matmul_multiply_divide        COO      42.2±0.9μs 
+                  matmul_multiply_divide        CPP      35.4±0.1μs 
+                  matmul_multiply_divide        RUST     24.9±0.2μs 
+                       rmul_promote            SCIPY     68.4±0.2μs 
+                       rmul_promote             COO     41.5±0.09μs 
+                       rmul_promote             CPP     35.1±0.09μs 
+                       rmul_promote             RUST    24.8±0.06μs 
+                      hstack_vstack            SCIPY     68.8±0.5μs 
+                      hstack_vstack             COO      41.6±0.1μs 
+                      hstack_vstack             CPP      35.4±0.1μs 
+                      hstack_vstack             RUST    24.9±0.06μs 
+                       concatenate             SCIPY     68.9±0.2μs 
+                       concatenate              COO      41.4±0.3μs 
+                       concatenate              CPP         n/a     
+                       concatenate              RUST    24.7±0.07μs 
+                     diag_trace_kron           SCIPY     69.2±0.1μs 
+                     diag_trace_kron            COO     41.8±0.07μs 
+                     diag_trace_kron            CPP      35.3±0.1μs 
+                     diag_trace_kron            RUST     24.9±0.1μs 
+                         convolve              SCIPY    68.3±0.08μs 
+                         convolve               COO      41.6±0.2μs 
+                         convolve               CPP     35.6±0.05μs 
+                         convolve               RUST    24.7±0.03μs 
+                   cone_atoms_composite        SCIPY      1.13±0ms  
+                   cone_atoms_composite         COO       655±4μs   
+                   cone_atoms_composite         CPP       456±1μs   
+                   cone_atoms_composite         RUST      235±2μs   
+                       nd_array_ops            SCIPY     69.1±0.5μs 
+                       nd_array_ops             COO     41.7±0.09μs 
+                       nd_array_ops             CPP         n/a     
+                       nd_array_ops             RUST    24.7±0.06μs 
+                        nd_matmul              SCIPY     68.6±0.4μs 
+                        nd_matmul               COO     41.5±0.06μs 
+                        nd_matmul               CPP         n/a     
+                        nd_matmul               RUST     24.8±0.1μs 
+                          einsum               SCIPY     69.3±0.4μs 
+                          einsum                COO      41.8±0.1μs 
+                          einsum                CPP         n/a     
+                          einsum                RUST     24.9±0.2μs 
+                      deep_neg_tree            SCIPY     68.5±0.2μs 
+                      deep_neg_tree             COO      41.3±0.2μs 
+                      deep_neg_tree             CPP     35.2±0.06μs 
+                      deep_neg_tree             RUST    24.9±0.08μs 
+                      wide_sum_tree            SCIPY     68.9±0.5μs 
+                      wide_sum_tree             COO      41.8±0.4μs 
+                      wide_sum_tree             CPP      35.4±0.1μs 
+                      wide_sum_tree             RUST     24.8±0.1μs 
+                     parameterized_lp          SCIPY     249±0.3ms  
+                     parameterized_lp           COO      298±0.5μs  
+                     parameterized_lp           CPP      75.1±0.6ms 
+                     parameterized_lp           RUST      507±5μs   
+                  murray_dense_constant        SCIPY    20.9±0.06ms 
+                  murray_dense_constant         COO     20.7±0.04ms 
+                  murray_dense_constant         CPP     11.0±0.05ms 
+                  murray_dense_constant         RUST    18.9±0.03ms 
+               murray_dense_above_threshold    SCIPY     91.4±0.5ms 
+               murray_dense_above_threshold     COO      91.8±0.3ms 
+               murray_dense_above_threshold     CPP     90.4±0.08ms 
+               murray_dense_above_threshold     RUST     33.6±0.4ms 
+                  kron_diag_dense_affine       SCIPY      920±3μs   
+                  kron_diag_dense_affine        COO       1.08±0ms  
+                  kron_diag_dense_affine        CPP      234±0.9μs  
+                  kron_diag_dense_affine        RUST     94.3±0.3μs 
+              ============================== ========= =============
+
+[ 62.50%] ···· For parameters: 'concatenate', 'CPP'
+               asv: skipped: NotImplementedError('concatenate uses expressions unsupported by CPP')
+               
+               For parameters: 'nd_array_ops', 'CPP'
+               asv: skipped: NotImplementedError('nd_array_ops uses expressions unsupported by CPP')
+               
+               For parameters: 'nd_matmul', 'CPP'
+               asv: skipped: NotImplementedError('nd_matmul uses expressions unsupported by CPP')
+               
+               For parameters: 'einsum', 'CPP'
+               asv: skipped: NotImplementedError('einsum uses expressions unsupported by CPP')
+
+[ 75.00%] ··· ...ompileCanonicalization.time_get_problem_data                 ok
+[ 75.00%] ··· ============================== ========= =============
+                        case_name             backend               
+              ------------------------------ --------- -------------
+                    core_affine_atoms          SCIPY    1.65±0.01ms 
+                    core_affine_atoms           COO     1.54±0.01ms 
+                    core_affine_atoms           CPP       1.30±0ms  
+                    core_affine_atoms           RUST      1.22±0ms  
+                  matmul_multiply_divide       SCIPY    2.31±0.01ms 
+                  matmul_multiply_divide        COO     2.63±0.01ms 
+                  matmul_multiply_divide        CPP     1.97±0.01ms 
+                  matmul_multiply_divide        RUST    1.65±0.01ms 
+                       rmul_promote            SCIPY    1.75±0.01ms 
+                       rmul_promote             COO     1.52±0.01ms 
+                       rmul_promote             CPP       1.34±0ms  
+                       rmul_promote             RUST      1.26±0ms  
+                      hstack_vstack            SCIPY      2.38±0ms  
+                      hstack_vstack             COO       2.08±0ms  
+                      hstack_vstack             CPP     1.49±0.01ms 
+                      hstack_vstack             RUST      1.37±0ms  
+                       concatenate             SCIPY    2.30±0.01ms 
+                       concatenate              COO     2.02±0.01ms 
+                       concatenate              CPP         n/a     
+                       concatenate              RUST      1.34±0ms  
+                     diag_trace_kron           SCIPY    3.14±0.01ms 
+                     diag_trace_kron            COO     2.41±0.01ms 
+                     diag_trace_kron            CPP       1.54±0ms  
+                     diag_trace_kron            RUST      1.42±0ms  
+                         convolve              SCIPY    1.59±0.01ms 
+                         convolve               COO       1.51±0ms  
+                         convolve               CPP     1.26±0.01ms 
+                         convolve               RUST      1.19±0ms  
+                   cone_atoms_composite        SCIPY    5.73±0.02ms 
+                   cone_atoms_composite         COO     5.13±0.03ms 
+                   cone_atoms_composite         CPP     4.34±0.01ms 
+                   cone_atoms_composite         RUST    4.05±0.03ms 
+                       nd_array_ops            SCIPY    2.21±0.01ms 
+                       nd_array_ops             COO     1.65±0.01ms 
+                       nd_array_ops             CPP         n/a     
+                       nd_array_ops             RUST      1.34±0ms  
+                        nd_matmul              SCIPY    1.45±0.01ms 
+                        nd_matmul               COO       1.30±0ms  
+                        nd_matmul               CPP         n/a     
+                        nd_matmul               RUST      1.08±0ms  
+                          einsum               SCIPY    1.97±0.01ms 
+                          einsum                COO       1.92±0ms  
+                          einsum                CPP         n/a     
+                          einsum                RUST    1.33±0.01ms 
+                      deep_neg_tree            SCIPY    2.83±0.01ms 
+                      deep_neg_tree             COO       2.24±0ms  
+                      deep_neg_tree             CPP       2.33±0ms  
+                      deep_neg_tree             RUST      2.04±0ms  
+                      wide_sum_tree            SCIPY    12.5±0.03ms 
+                      wide_sum_tree             COO     21.8±0.08ms 
+                      wide_sum_tree             CPP     7.01±0.01ms 
+                      wide_sum_tree             RUST    6.22±0.02ms 
+                     parameterized_lp          SCIPY      251±1ms   
+                     parameterized_lp           COO     2.13±0.01ms 
+                     parameterized_lp           CPP      109±0.3ms  
+                     parameterized_lp           RUST    2.15±0.01ms 
+                  murray_dense_constant        SCIPY    29.8±0.04ms 
+                  murray_dense_constant         COO     29.6±0.08ms 
+                  murray_dense_constant         CPP     20.2±0.06ms 
+                  murray_dense_constant         RUST     27.4±0.2ms 
+               murray_dense_above_threshold    SCIPY     169±0.5ms  
+               murray_dense_above_threshold     COO      173±0.4ms  
+               murray_dense_above_threshold     CPP      169±0.3ms  
+               murray_dense_above_threshold     RUST      112±1ms   
+                  kron_diag_dense_affine       SCIPY    2.72±0.01ms 
+                  kron_diag_dense_affine        COO     2.85±0.01ms 
+                  kron_diag_dense_affine        CPP     1.97±0.01ms 
+                  kron_diag_dense_affine        RUST    1.80±0.01ms 
+              ============================== ========= =============
+
+[ 75.00%] ···· For parameters: 'concatenate', 'CPP'
+               asv: skipped: NotImplementedError('concatenate uses expressions unsupported by CPP')
+               
+               For parameters: 'nd_array_ops', 'CPP'
+               asv: skipped: NotImplementedError('nd_array_ops uses expressions unsupported by CPP')
+               
+               For parameters: 'nd_matmul', 'CPP'
+               asv: skipped: NotImplementedError('nd_matmul uses expressions unsupported by CPP')
+               
+               For parameters: 'einsum', 'CPP'
+               asv: skipped: NotImplementedError('einsum uses expressions unsupported by CPP')
+
+[ 87.50%] ··· ...pExpressionTreeScaling.time_get_problem_data                 ok
+[ 87.50%] ··· ======= ========= =============
+               depth   backend               
+              ------- --------- -------------
+                 4      SCIPY      1.27±0ms  
+                 4       COO       1.16±0ms  
+                 4       CPP       1.15±0ms  
+                 4       RUST      1.08±0ms  
+                 32     SCIPY    1.95±0.01ms 
+                 32      COO     1.64±0.01ms 
+                 32      CPP       1.70±0ms  
+                 32      RUST      1.52±0ms  
+                256     SCIPY    8.34±0.02ms 
+                256      COO     6.45±0.01ms 
+                256      CPP     6.86±0.03ms 
+                256      RUST    5.55±0.01ms 
+              ======= ========= =============
+
+[100.00%] ··· ...eExpressionTreeScaling.time_get_problem_data                 ok
+[100.00%] ··· ======= ========= =============
+               width   backend               
+              ------- --------- -------------
+                 8      SCIPY    2.40±0.01ms 
+                 8       COO     2.75±0.01ms 
+                 8       CPP     1.63±0.01ms 
+                 8       RUST    1.50±0.01ms 
+                 64     SCIPY    11.0±0.02ms 
+                 64      COO      15.6±0.1ms 
+                 64      CPP     4.99±0.01ms 
+                 64      RUST    4.91±0.02ms 
+                256     SCIPY     40.2±0.1ms 
+                256      COO      70.6±0.2ms 
+                256      CPP     18.0±0.04ms 
+                256      RUST    18.3±0.03ms 
+              ======= ========= =============
+

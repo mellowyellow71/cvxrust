@@ -1,0 +1,7 @@
+RESULT {"class": "Yitzhaki", "module": "gini_portfolio.py", "backend": "RUST", "median_ms": 524.984, "samples_ms": [548.419, 524.984, 513.824], "status": "ok"}
+RESULT {"class": "Murray", "module": "gini_portfolio.py", "backend": "RUST", "median_ms": 1024.266, "samples_ms": [1024.266, 1021.455, 1026.933], "status": "ok"}
+RESULT {"class": "Cajas", "module": "gini_portfolio.py", "backend": "RUST", "median_ms": 359.968, "samples_ms": [359.968, 361.553, 350.84], "status": "ok"}
+RESULT {"class": "LeastSquares", "module": "simple_QP_benchmarks.py", "backend": "RUST", "median_ms": 798.323, "samples_ms": [782.934, 798.323, 839.165], "status": "ok"}
+RESULT {"class": "UnconstrainedQP", "module": "simple_QP_benchmarks.py", "backend": "RUST", "median_ms": 3605.811, "samples_ms": [3985.966, 3605.811, 3455.522], "status": "ok"}
+RESULT {"class": "TvInpainting", "module": "tv_inpainting.py", "backend": "RUST", "median_ms": 888.756, "samples_ms": [888.756, 893.529, 873.17], "status": "ok"}
+RESULT {"class": "SDPSegfault1132Benchmark", "module": "sdp_segfault_1132_benchmark.py", "backend": "RUST", "median_ms": 29112.503, "samples_ms": [29112.503, 29245.328, 27951.29], "status": "ok"}

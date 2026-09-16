@@ -1,0 +1,69 @@
+/Users/revantkasichainula/cvxpy/cvxpy/reductions/solvers/solving_chain.py:249: UserWarning: Your problem has too many parameters for efficient DPP compilation. We suggest setting 'ignore_dpp = True'.
+  warnings.warn(
+/Users/revantkasichainula/cvxpy/cvxpy/reductions/solvers/solving_chain.py:249: UserWarning: Your problem has too many parameters for efficient DPP compilation. We suggest setting 'ignore_dpp = True'.
+  warnings.warn(
+/Users/revantkasichainula/cvxpy/cvxpy/atoms/affine/reshape.py:68: FutureWarning: 
+    You didn't specify the order of the reshape expression. The default order
+    used in CVXPY is Fortran ('F') order. This default will change to match NumPy's
+    default order ('C') in a future version of CVXPY.
+    To suppress this warning, please specify the order explicitly.
+    
+  warnings.warn(reshape_order_warning, FutureWarning)
+/Users/revantkasichainula/cvxpy/cvxpy/reductions/solvers/solving_chain.py:249: UserWarning: Your problem has too many parameters for efficient DPP compilation. We suggest setting 'ignore_dpp = True'.
+  warnings.warn(
+/Users/revantkasichainula/cvxpy/cvxpy/atoms/affine/reshape.py:68: FutureWarning: 
+    You didn't specify the order of the reshape expression. The default order
+    used in CVXPY is Fortran ('F') order. This default will change to match NumPy's
+    default order ('C') in a future version of CVXPY.
+    To suppress this warning, please specify the order explicitly.
+    
+  warnings.warn(reshape_order_warning, FutureWarning)
+/tmp/cvxpy-benchmarks/benchmark/optimal_advertising.py:40: RuntimeWarning: invalid value encountered in scalar divide
+  R = np.array([np.random.lognormal(c.min() / c[i]) for i in range(m)])
+/Users/revantkasichainula/cvxpy/cvxpy/reductions/solvers/solving_chain.py:249: UserWarning: Your problem has too many parameters for efficient DPP compilation. We suggest setting 'ignore_dpp = True'.
+  warnings.warn(
+/Users/revantkasichainula/cvxpy/cvxpy/reductions/solvers/solving_chain.py:249: UserWarning: Your problem has too many parameters for efficient DPP compilation. We suggest setting 'ignore_dpp = True'.
+  warnings.warn(
+/Users/revantkasichainula/cvxpy/cvxpy/atoms/affine/reshape.py:68: FutureWarning: 
+    You didn't specify the order of the reshape expression. The default order
+    used in CVXPY is Fortran ('F') order. This default will change to match NumPy's
+    default order ('C') in a future version of CVXPY.
+    To suppress this warning, please specify the order explicitly.
+    
+  warnings.warn(reshape_order_warning, FutureWarning)
+/Users/revantkasichainula/cvxpy/cvxpy/reductions/solvers/solving_chain.py:249: UserWarning: Your problem has too many parameters for efficient DPP compilation. We suggest setting 'ignore_dpp = True'.
+  warnings.warn(
+/Users/revantkasichainula/cvxpy/cvxpy/atoms/affine/reshape.py:68: FutureWarning: 
+    You didn't specify the order of the reshape expression. The default order
+    used in CVXPY is Fortran ('F') order. This default will change to match NumPy's
+    default order ('C') in a future version of CVXPY.
+    To suppress this warning, please specify the order explicitly.
+    
+  warnings.warn(reshape_order_warning, FutureWarning)
+/tmp/cvxpy-benchmarks/benchmark/optimal_advertising.py:40: RuntimeWarning: invalid value encountered in scalar divide
+  R = np.array([np.random.lognormal(c.min() / c[i]) for i in range(m)])
+/Users/revantkasichainula/cvxpy/rust_benchmarks/cvxpy-benchmarks/benchmark/high_dim_convex_plasticity.py:83: FutureWarning: 
+    You didn't specify the order of the reshape expression. The default order
+    used in CVXPY is Fortran ('F') order. This default will change to match NumPy's
+    default order ('C') in a future version of CVXPY.
+    To suppress this warning, please specify the order explicitly.
+    
+  delta_sig_vector = cp.reshape(delta_sig, (N * 4))
+/Users/revantkasichainula/cvxpy/rust_benchmarks/run_one.py:67: UserWarning: You are solving a parameterized problem that is not DPP. Because the problem is not DPP, subsequent solves will not be faster than the first one. For more information, see the documentation on Disciplined Parametrized Programming, at https://www.cvxpy.org/tutorial/dpp/index.html
+  return orig(self, *args, **kwargs)
+/Users/revantkasichainula/cvxpy/rust_benchmarks/cvxpy-benchmarks/benchmark/sdp_segfault_1132_benchmark.py:45: FutureWarning: 
+    You didn't specify the order of the reshape expression. The default order
+    used in CVXPY is Fortran ('F') order. This default will change to match NumPy's
+    default order ('C') in a future version of CVXPY.
+    To suppress this warning, please specify the order explicitly.
+    
+  A = cp.kron(e, cp.reshape(cp.diag(V @ G @ V.T), (1, n)))
+/Users/revantkasichainula/cvxpy/rust_benchmarks/cvxpy-benchmarks/benchmark/sdp_segfault_1132_benchmark.py:46: FutureWarning: 
+    You didn't specify the order of the reshape expression. The default order
+    used in CVXPY is Fortran ('F') order. This default will change to match NumPy's
+    default order ('C') in a future version of CVXPY.
+    To suppress this warning, please specify the order explicitly.
+    
+  B = cp.kron(e.T, cp.reshape(cp.diag(V @ G @ V.T), (n, 1)))
+/Users/revantkasichainula/cvxpy/rust_benchmarks/cvxpy-benchmarks/benchmark/optimal_advertising.py:40: RuntimeWarning: invalid value encountered in scalar divide
+  R = np.array([np.random.lognormal(c.min() / c[i]) for i in range(m)])

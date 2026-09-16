@@ -51,8 +51,9 @@ def load_asv(path: str) -> dict[tuple[str, str, str], float]:
         idx = 0
         for case in cases:
             for backend in backends:
-                if idx < len(values) and values[idx] is not None:
-                    out[(bench_name, case.strip("'\""), backend.strip("'\""))] = values[idx]
+                v = values[idx] if idx < len(values) else None
+                if isinstance(v, (int, float)) and not math.isnan(v):
+                    out[(bench_name, case.strip("'\""), backend.strip("'\""))] = v
                 idx += 1
     return out
 

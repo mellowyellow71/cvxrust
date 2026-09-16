@@ -1,0 +1,121 @@
+/Users/revantkasichainula/cvxpy/rust_benchmarks/benchmark_suite.py:494: CvxpyDeprecationWarning: conv is deprecated. Use convolve instead.
+  return cp.Problem(cp.Minimize(cp.sum_squares(cp.conv(c, x) - b)))
+/Users/revantkasichainula/cvxpy/rust_benchmarks/benchmark_suite.py:286: CvxpyDeprecationWarning: conv is deprecated. Use convolve instead.
+  prob.get_problem_data(solver, canon_backend="SCIPY")
+============================================================
+CVXPY Canonicalization Benchmark Suite v1.0.0
+============================================================
+Machine: Darwin macOS-26.5.1-arm64-arm-64bit-Mach-O / arm64 / 11 cores
+CPU: Apple M3 Pro
+BLAS: accelerate unknown
+Python 3.13.5 / NumPy 2.4.4 / SciPy 1.17.1 / CVXPY 1.9.1.dev69+g40947203c.d20260702
+Rust backend: available
+Threads: RAYON=auto, OMP=1
+Git: ec2a0c34c
+Mode: default | Layer: build_matrix | Backends: RUST, SCIPY, CPP, COO | Seed: 42
+============================================================
+
+Running 40 problems across 4 backends...
+  Problem                                   RUST      SCIPY        CPP        COO   SCIPY/RUST
+
+--- A: Arithmetic ---
+  dense_matmul (n=50)                     0.06ms      0.13ms!     0.08ms      0.09ms     2.10x    1.40x    1.45x
+  dense_matmul (n=200)                    0.06ms      0.12ms      0.08ms      0.09ms     1.99x    1.42x    1.46x
+  dense_matmul (n=500)                    0.06ms      0.12ms      0.09ms      0.09ms     1.96x    1.41x    1.43x
+  dense_matmul (n=1000)                   0.06ms      0.12ms      0.08ms      0.09ms     1.96x    1.40x    1.45x
+  sparse_matmul (n=100)                   0.06ms      0.12ms      0.09ms      0.09ms!    2.06x    1.48x    1.54x
+  sparse_matmul (n=500)                   0.06ms      0.12ms      0.08ms      0.08ms     2.05x    1.42x    1.45x
+  sparse_matmul (n=2000)                  0.06ms      0.12ms      0.08ms      0.08ms     2.02x    1.45x    1.46x
+  dense_qp (n=50)                         0.07ms      0.35ms      0.12ms      0.36ms     5.14x    1.79x    5.29x
+  dense_qp (n=200)                        0.07ms      0.35ms      0.13ms      0.37ms     5.00x    1.85x    5.28x
+  dense_qp (n=500)                        0.08ms      0.38ms      0.15ms      0.38ms     4.95x    1.90x    4.97x
+
+--- B: Constraints ---
+  many_constraints (m=10)                 0.26ms!     2.15ms      0.31ms      1.41ms     8.32x    1.20x    5.48x
+  many_constraints (m=50)                 0.45ms     10.26ms      1.12ms      6.58ms    23.04x    2.52x   14.77x
+  many_constraints (m=100)                0.65ms     20.30ms      2.23ms     13.01ms    31.03x    3.42x   19.89x
+  many_constraints (m=500)                2.31ms    108.41ms     14.27ms     69.53ms    46.83x    6.16x   30.03x
+  many_constraints (m=1000)               4.41ms    212.16ms     33.76ms    139.29ms    48.15x    7.66x   31.61x
+  many_constraints (m=5000)              23.45ms!  1050.10ms    375.40ms    697.91ms    44.79x   16.01x   29.77x
+  box_constraints (n=50)                  0.07ms      0.28ms      0.12ms      0.14ms     3.99x    1.68x    1.95x
+  box_constraints (n=200)                 0.08ms      0.31ms      0.15ms      0.16ms     3.75x    1.83x    1.93x
+  box_constraints (n=1000)                0.14ms      0.43ms      0.29ms      0.26ms     3.03x    2.07x    1.87x
+
+--- C: Structural ---
+  matrix_indexing (n=20)                  0.06ms      0.12ms      0.08ms      0.09ms     2.01x    1.45x    1.50x
+  matrix_indexing (n=50)                  0.06ms      0.11ms      0.08ms      0.08ms     2.07x    1.50x    1.49x
+  matrix_indexing (n=100)                 0.06ms      0.11ms      0.08ms      0.08ms     2.06x    1.48x    1.50x
+  hstack (width=10)                       0.09ms      1.97ms      0.21ms      1.33ms    22.34x    2.38x   15.04x
+  hstack (width=50)                       0.18ms      9.67ms      0.75ms      6.78ms    54.32x    4.18x   38.08x
+  hstack (width=200)                      0.54ms     38.79ms      3.77ms     26.32ms    72.20x    7.03x   49.00x
+  portfolio (n=50)                        0.07ms      0.31ms      0.12ms      0.14ms     4.31x    1.67x    1.92x
+  portfolio (n=200)                       0.08ms      0.33ms      0.14ms      0.15ms     4.18x    1.76x    1.92x
+  portfolio (n=500)                       0.09ms      0.37ms      0.18ms      0.18ms     4.03x    1.91x    1.92x
+
+--- D: Specialized ---
+  lasso (n=50)                            0.19ms      0.77ms      0.40ms      0.58ms     4.03x    2.08x    3.03x
+  lasso (n=200)                           1.74ms      5.66ms      3.95ms      5.65ms     3.25x    2.27x    3.24x
+  lasso (n=500)                          14.19ms     36.95ms     25.52ms     37.22ms     2.60x    1.80x    2.62x
+  lasso (n=1000)                         46.16ms    145.76ms    106.03ms    150.49ms     3.16x    2.30x    3.26x
+  svm (m=100)                             0.21ms      0.74ms      0.41ms      0.75ms     3.55x    1.95x    3.59x
+  svm (m=500)                             0.72ms      2.05ms      1.45ms      2.23ms     2.84x    2.00x    3.09x
+  convolution (len=100)                   0.06ms      0.12ms      0.08ms      0.09ms     2.05x    1.47x    1.51x
+  convolution (len=500)                   0.06ms      0.12ms      0.08ms      0.09ms     1.99x    1.40x    1.50x
+
+--- E: Depth ---
+  nested_affine (depth=3)                 0.06ms      0.11ms      0.08ms      0.09ms     1.98x    1.43x    1.51x
+  nested_affine (depth=5)                 0.06ms      0.11ms      0.08ms      0.08ms     2.06x    1.45x    1.51x
+  nested_affine (depth=10)                0.06ms      0.11ms      0.08ms      0.08ms     2.01x    1.40x    1.49x
+  nested_affine (depth=20)                0.06ms      0.12ms      0.08ms      0.09ms     2.05x    1.46x    1.51x
+
+============================================================
+SUMMARY
+============================================================
+
+Layer: build_matrix
+  SCIPY/RUST: geomean 4.81x, arith mean 11.03x, range [1.96x, 72.20x], RUST wins 40/40
+  CPP/RUST: geomean 2.05x, arith mean 2.56x, range [1.20x, 16.01x], RUST wins 40/40
+  COO/RUST: geomean 3.48x, arith mean 7.58x, range [1.43x, 49.00x], RUST wins 40/40
+  High variance (CV>10%): dense_matmul (n=50)/SCIPY (CV=15%), sparse_matmul (n=100)/COO (CV=10%), many_constraints (m=10)/RUST (CV=10%), many_constraints (m=5000)/RUST (CV=13%)
+
+============================================================
+SCALING: Constraint Count Scaling
+============================================================
+Value              RUST      SCIPY        CPP        COO    Speedup
+-------------------------------------------------------------------
+  4              0.08ms     0.92ms     0.17ms     0.62ms    11.58x
+  10             0.25ms     2.20ms     0.29ms     1.43ms     8.65x
+  50             0.45ms    10.94ms     1.14ms     7.09ms    24.59x
+  100            0.65ms    21.54ms     2.26ms    13.86ms    33.22x
+  500            2.33ms   108.35ms    14.39ms    69.58ms    46.51x
+  1000           4.51ms   216.20ms    33.91ms   138.47ms    47.97x
+  2000           9.08ms   434.68ms    86.10ms   279.47ms    47.85x
+  5000          23.19ms  1079.87ms   372.79ms   700.03ms    46.57x
+
+============================================================
+SCALING: Variable Size Scaling
+============================================================
+Value              RUST      SCIPY        CPP        COO    Speedup
+-------------------------------------------------------------------
+  10             0.06ms     0.12ms     0.08ms     0.09ms     2.05x
+  50             0.06ms     0.12ms     0.08ms     0.09ms     2.05x
+  100            0.06ms     0.11ms     0.08ms     0.09ms     1.88x
+  500            0.06ms     0.11ms     0.08ms     0.08ms     1.99x
+  1000           0.06ms     0.11ms     0.08ms     0.08ms     2.04x
+  2000           0.06ms     0.11ms     0.08ms     0.08ms     1.99x
+  5000           0.06ms     0.11ms     0.08ms     0.08ms     1.96x
+
+============================================================
+SCALING: Matrix Density Scaling
+============================================================
+Value              RUST      SCIPY        CPP        COO    Speedup
+-------------------------------------------------------------------
+  0.001          0.07ms     0.26ms     0.11ms     0.23ms     3.75x
+  0.01           0.07ms     0.26ms     0.12ms     0.23ms     3.81x
+  0.05           0.07ms     0.26ms     0.12ms     0.23ms     3.81x
+  0.1            0.07ms     0.26ms     0.12ms     0.23ms     3.78x
+  0.3            0.07ms     0.26ms     0.11ms     0.23ms     3.75x
+  0.5            0.07ms     0.26ms     0.11ms     0.23ms     3.80x
+  1.0            0.07ms     0.26ms     0.11ms     0.23ms     3.85x
+
+Results written to /Users/revantkasichainula/cvxpy/rust_benchmarks/suite_4backend.json
