@@ -209,16 +209,28 @@ COO_CANON_BACKEND = "COO"  # 3D COO sparse tensor backend: O(nnz) operations for
 # Builds the problem matrices by evaluating the expression trees with the C diff engine
 DIFFENGINE_CANON_BACKEND = "DIFFENGINE"
 
+def rust_backend_available() -> bool:
+    """Whether the compiled ``cvxpy_rust`` extension can be used.
+
+    A bare ``import cvxpy_rust`` is not enough: in a source checkout without the
+    built extension, the ``cvxpy_rust/`` crate directory imports as an empty
+    namespace package, so the entry point has to be checked explicitly.
+    """
+    try:
+        import cvxpy_rust
+    except ImportError:
+        return False
+    return hasattr(cvxpy_rust, "build_matrix_serialized")
+
+
 # Default canonicalization backend, pyodide uses SciPy
-# Priority: RUST (if the cvxpy_rust extension is importable) > CPP > SCIPY (pyodide)
+# Priority: RUST (if the cvxpy_rust extension is built) > CPP > SCIPY (pyodide)
 def _get_default_canon_backend() -> str:
     if sys.platform == "emscripten":
         return SCIPY_CANON_BACKEND
-    try:
-        import cvxpy_rust  # noqa: F401
+    if rust_backend_available():
         return RUST_CANON_BACKEND
-    except ImportError:
-        return CPP_CANON_BACKEND
+    return CPP_CANON_BACKEND
 
 
 DEFAULT_CANON_BACKEND = _get_default_canon_backend()

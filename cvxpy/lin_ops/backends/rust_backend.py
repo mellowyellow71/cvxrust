@@ -33,7 +33,7 @@ from cvxpy.lin_ops.backends.scipy_backend import (
     _build_interleaved_matrix_mul,
     _build_interleaved_matrix_rmul,
 )
-from cvxpy.settings import SPARSE_DENSITY_THRESHOLD
+from cvxpy.settings import SPARSE_DENSITY_THRESHOLD, rust_backend_available
 
 # Dense constants at least this large are scanned for sparsity; mostly-zero
 # ones are serialized as sparse instead (below the scan is not worth it).
@@ -416,6 +416,12 @@ class RustCanonBackend(CanonBackend):
     def build_matrix(
         self, lin_ops: list[LinOp], order: str = 'F'
     ) -> sp.csc_array:
+        if not rust_backend_available():
+            raise ImportError(
+                "The RUST canonicalization backend needs the compiled cvxpy_rust "
+                "extension; build it with `pip install -e .` or `maturin develop` "
+                "from cvxpy_rust/, or select another canon_backend."
+            )
         import cvxpy_rust
         if order != 'F':
             raise ValueError(

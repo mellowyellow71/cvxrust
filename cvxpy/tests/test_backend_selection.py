@@ -9,6 +9,7 @@ The backend selection priority is:
 
 from __future__ import annotations
 
+import types
 import warnings
 
 import numpy as np
@@ -226,3 +227,36 @@ class TestBackendSelectionSolve:
             prob.solve(solver=cp.CLARABEL)
 
         assert prob.status == cp.OPTIMAL
+
+
+class TestRustAvailability:
+    """The RUST default requires the built extension, not just an importable name."""
+
+    @pytest.fixture(autouse=True)
+    def _not_emscripten(self, monkeypatch):
+        monkeypatch.setattr(s.sys, "platform", "linux")
+
+    def test_namespace_package_is_not_available(self, monkeypatch):
+        """A source checkout imports cvxpy_rust/ as an empty namespace package."""
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", types.ModuleType("cvxpy_rust"))
+        assert not s.rust_backend_available()
+        assert s._get_default_canon_backend() == s.CPP_CANON_BACKEND
+
+    def test_missing_module_is_not_available(self, monkeypatch):
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", None)  # forces ImportError
+        assert not s.rust_backend_available()
+        assert s._get_default_canon_backend() == s.CPP_CANON_BACKEND
+
+    def test_built_extension_is_available(self, monkeypatch):
+        stub = types.ModuleType("cvxpy_rust")
+        stub.build_matrix_serialized = lambda *args: None
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", stub)
+        assert s.rust_backend_available()
+        assert s._get_default_canon_backend() == s.RUST_CANON_BACKEND
+
+    def test_explicit_rust_without_extension_raises(self, monkeypatch):
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", types.ModuleType("cvxpy_rust"))
+        x = cp.Variable(2)
+        prob = cp.Problem(cp.Minimize(cp.sum(x)), [x >= 1])
+        with pytest.raises(ImportError, match="cvxpy_rust"):
+            prob.get_problem_data(cp.CLARABEL, canon_backend=s.RUST_CANON_BACKEND)

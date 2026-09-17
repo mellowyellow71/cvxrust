@@ -131,8 +131,8 @@ def test_matmul_with_parametric_expression_lhs(backend_name):
     Regression test: reshaping a parametric matmul lhs deduplicated entries
     by param_idx, silently dropping all but one entry of A per parameter.
     """
-    if backend_name == s.RUST_CANON_BACKEND:
-        pytest.importorskip("cvxpy_rust")
+    if backend_name == s.RUST_CANON_BACKEND and not s.rust_backend_available():
+        pytest.skip("cvxpy_rust extension not built")
 
     p = cp.Parameter(3)
     p.value = np.array([1.0, 2.0, 3.0])

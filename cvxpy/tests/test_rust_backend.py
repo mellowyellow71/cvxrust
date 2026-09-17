@@ -40,14 +40,11 @@ from scipy import sparse
 
 import cvxpy.settings as s
 from cvxpy.lin_ops.backends import get_backend
+from cvxpy.lin_ops.canon_backend import RustCanonBackend
 from cvxpy.lin_ops.lin_op import CONSTANT_ID, LinOp
 
-# Check if Rust backend is available
-try:
-    from cvxpy.lin_ops.canon_backend import RustCanonBackend
-    RUST_AVAILABLE = True
-except ImportError:
-    RUST_AVAILABLE = False
+# The extension, not just the module name, must be present.
+RUST_AVAILABLE = s.rust_backend_available()
 
 
 def linOpHelper(shape, type, data=None, args=None):
