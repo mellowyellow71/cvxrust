@@ -309,79 +309,39 @@ pub fn process_vstack(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 }
 
 /// Compute row permutation for vstack
+///
+/// vstack promotes every argument to at least 2-D (a 1-D `(n,)` argument
+/// becomes a `(1, n)` row) and concatenates along axis 0, so every argument
+/// shares the output's trailing dimensions. In F-order the trailing
+/// dimensions are the slow axes: for each trailing multi-index `t` the output
+/// holds, argument by argument, that argument's `rows_a` leading entries,
+/// which sit at `arg_offset + r + rows_a * t` in the argument's own F-order
+/// flattening. This covers 2-D and N-D outputs alike.
 fn compute_vstack_indices(args: &[LinOp], output_shape: &[usize]) -> Vec<i64> {
-    if args.is_empty() {
-        return vec![];
-    }
+    let trailing: usize = output_shape.iter().skip(1).product::<usize>().max(1);
 
-    let mut indices = Vec::new();
+    let mut arg_offsets = Vec::with_capacity(args.len());
+    let mut rows_per_arg = Vec::with_capacity(args.len());
     let mut offset = 0i64;
-
-    // Build index arrays for each arg
-    let mut arg_indices: Vec<Vec<i64>> = Vec::new();
     for arg in args {
-        let arg_rows = arg.size();
-        let idx: Vec<i64> = (0..arg_rows as i64).map(|i| i + offset).collect();
-        arg_indices.push(idx);
-        offset += arg_rows as i64;
+        let size = arg.size();
+        if size % trailing != 0 {
+            // Shapes that do not tile the output's trailing dims cannot be
+            // vstacked; fall back to plain concatenation rather than panic.
+            return (0..args.iter().map(|a| a.size() as i64).sum()).collect();
+        }
+        arg_offsets.push(offset);
+        rows_per_arg.push(size / trailing);
+        offset += size as i64;
     }
 
-    // Check if output is 2D - need column-major ordering
-    if output_shape.len() == 2 {
-        // Vstacking creates a 2D result
-        // For vstack of 1D arrays [a, b] and [c, d] into (2, 2):
-        //   Output in F-order: (0,0), (1,0), (0,1), (1,1) = a, c, b, d
-        // For vstack of 2D arrays (m, n) each into (k*m, n):
-        //   Interleave rows within each column
-
-        let _n_rows_output = output_shape[0]; // unused but documents layout
-        let n_cols_output = output_shape[1];
-        let _n_args = args.len(); // unused but documents layout
-
-        // How many rows does each arg contribute?
-        let rows_per_arg: Vec<usize> = args
-            .iter()
-            .map(|a| if a.shape.len() == 2 { a.shape[0] } else { 1 })
-            .collect();
-
-        // Columns per arg (should all be equal or 1 for broadcasting)
-        let cols_per_arg: Vec<usize> = args
-            .iter()
-            .map(|a| {
-                if a.shape.len() == 2 {
-                    a.shape[1]
-                } else {
-                    a.size()
-                }
-            })
-            .collect();
-
-        // Iterate over output in Fortran order (column by column)
-        for col in 0..n_cols_output {
-            for (arg_idx, &n_rows) in rows_per_arg.iter().enumerate() {
-                let _arg_cols = cols_per_arg[arg_idx]; // unused but documents layout
-                for row in 0..n_rows {
-                    // Index into the arg's flat representation
-                    let arg_flat_idx = if args[arg_idx].shape.len() == 2 {
-                        row + col * n_rows
-                    } else {
-                        // 1D arg: col is the index
-                        col
-                    };
-                    // Bounds check to prevent panic
-                    if arg_flat_idx < arg_indices[arg_idx].len() {
-                        indices.push(arg_indices[arg_idx][arg_flat_idx]);
-                    }
-                }
-            }
-        }
-    } else {
-        // 1D output - just concatenate
-        for arg_idx in &arg_indices {
-            indices.extend(arg_idx);
+    let mut indices = Vec::with_capacity(offset as usize);
+    for t in 0..trailing {
+        for (arg_idx, &rows) in rows_per_arg.iter().enumerate() {
+            let base = arg_offsets[arg_idx] + (rows * t) as i64;
+            indices.extend(base..base + rows as i64);
         }
     }
-
     indices
 }
 
@@ -741,5 +701,43 @@ mod tests {
 
         // Should still have same non-zeros
         assert_eq!(tensor.nnz(), 2);
+    }
+
+    #[test]
+    fn test_vstack_indices_nd() {
+        // Two (3, 2, 2) arguments stacked into (6, 2, 2): for each of the
+        // four trailing positions, three rows from arg 0 then three from arg 1.
+        let arg = |_| LinOp {
+            op_type: OpType::Variable,
+            shape: vec![3, 2, 2],
+            args: vec![],
+            data: LinOpData::Int(1),
+        };
+        let args: Vec<LinOp> = (0..2).map(arg).collect();
+        let indices = compute_vstack_indices(&args, &[6, 2, 2]);
+        let expected: Vec<i64> = (0..4)
+            .flat_map(|t| {
+                let a = 3 * t;
+                let b = 12 + 3 * t;
+                [a, a + 1, a + 2, b, b + 1, b + 2]
+            })
+            .collect();
+        assert_eq!(indices, expected);
+    }
+
+    #[test]
+    fn test_vstack_indices_1d_args() {
+        // Two (4,) arguments become rows of a (2, 4) output: F-order interleaves them.
+        let arg = |_| LinOp {
+            op_type: OpType::Variable,
+            shape: vec![4],
+            args: vec![],
+            data: LinOpData::Int(1),
+        };
+        let args: Vec<LinOp> = (0..2).map(arg).collect();
+        assert_eq!(
+            compute_vstack_indices(&args, &[2, 4]),
+            vec![0, 4, 1, 5, 2, 6, 3, 7]
+        );
     }
 }

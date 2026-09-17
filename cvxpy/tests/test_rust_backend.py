@@ -951,6 +951,61 @@ class TestRustBackend:
         rust_result = rust_backend.build_matrix([var_op, neg_op, sum_entries_op])
         self.compare_matrices(scipy_result, rust_result)
 
+    @pytest.mark.parametrize("shape", [(2, 2, 2), (3, 2, 4), (2, 2, 3, 2)])
+    def test_sparse_const_nd(self, shape):
+        """N-D sparse constants (COO only in scipy) serialize as their F-order entries."""
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=0,
+        )
+        rng = np.random.default_rng(0)
+        dense = rng.random(shape) * (rng.random(shape) < 0.4)
+        sparse_data = sparse.coo_array(dense)
+        const_op = linOpHelper(shape=shape, type="sparse_const", data=sparse_data, args=[])
+        scipy_result = scipy_backend.build_matrix([const_op])
+        rust_result = rust_backend.build_matrix([const_op])
+        self.compare_matrices(scipy_result, rust_result)
+        np.testing.assert_allclose(rust_result.toarray().ravel(), dense.ravel(order="F"))
+
+    @pytest.mark.parametrize("shape", [(3, 2, 2), (2, 3, 4), (2, 2, 3, 2)])
+    def test_vstack_nd(self, shape):
+        """vstack of N-D arguments concatenates along axis 0 in F-order."""
+        size = int(np.prod(shape))
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={1: 0, 2: size},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=2 * size,
+        )
+        var1 = linOpHelper(shape=shape, type="variable", data=1, args=[])
+        var2 = linOpHelper(shape=shape, type="variable", data=2, args=[])
+        out_shape = (2 * shape[0],) + shape[1:]
+        vstack_op = linOpHelper(shape=out_shape, type="vstack", args=[var1, var2])
+        scipy_result = scipy_backend.build_matrix([vstack_op])
+        rust_result = rust_backend.build_matrix([vstack_op])
+        self.compare_matrices(scipy_result, rust_result)
+
+    @pytest.mark.parametrize("shape", [(3, 2, 2), (2, 4, 4), (2, 3, 2, 2)])
+    def test_trace_nd(self, shape):
+        """trace of a (*batch, n, n) argument gives one row per batch element."""
+        size = int(np.prod(shape))
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={1: 0},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=size,
+        )
+        var_op = linOpHelper(shape=shape, type="variable", data=1, args=[])
+        trace_op = linOpHelper(shape=shape[:-2], type="trace", args=[var_op])
+        scipy_result = scipy_backend.build_matrix([trace_op])
+        rust_result = rust_backend.build_matrix([trace_op])
+        self.compare_matrices(scipy_result, rust_result)
+
 
 @pytest.mark.skipif(not RUST_AVAILABLE, reason="cvxpy_rust not installed")
 class TestRustBackendEndToEnd:
@@ -1162,3 +1217,23 @@ class TestRustBackendEndToEnd:
         )
         with pytest.raises(ValueError, match="order='C' is not supported"):
             rust_backend.build_matrix([variable_lin_op], order='C')
+
+    def test_nd_batch_of_matrices(self):
+        """vstack of reshaped matrices, batched lambda_max and trace (was: CSC 3-D error)."""
+        import cvxpy as cp
+
+        n = 2
+        X = cp.Variable((n, n), symmetric=True)
+        Y = cp.Variable((n, n), symmetric=True)
+        batch = cp.vstack([
+            cp.reshape(X, (1, n, n), order="C"),
+            cp.reshape(Y, (1, n, n), order="C"),
+        ])
+        constraints = [X >> np.eye(n), Y >> 2 * np.eye(n)]
+        for objective in (cp.sum(cp.lambda_max(batch)), cp.sum(cp.trace(batch))):
+            prob = cp.Problem(cp.Minimize(objective), constraints)
+            prob.solve(solver=cp.CLARABEL, canon_backend=cp.SCIPY_CANON_BACKEND)
+            scipy_val = prob.value
+            prob.solve(solver=cp.CLARABEL, canon_backend=cp.RUST_CANON_BACKEND)
+            assert prob.status == cp.OPTIMAL
+            np.testing.assert_allclose(prob.value, scipy_val, atol=1e-5)

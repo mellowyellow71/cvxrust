@@ -223,6 +223,16 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
 
     def _emit_sparse(op_code, shape, nargs, matrix):
         nonlocal float_offset, int_offset
+        if matrix.ndim != 2:
+            # N-D sparse constants (COO only) cannot be CSC. A leaf's tensor
+            # rows are the F-order entries of its value whatever the shape,
+            # so emit the F-order flattening as a single CSC column.
+            coo = sp.coo_array(matrix)
+            flat = np.ravel_multi_index(coo.coords, coo.shape, order="F")
+            matrix = sp.csc_array(
+                (coo.data, (flat, np.zeros(len(flat), dtype=np.int64))),
+                shape=(int(np.prod(coo.shape)), 1),
+            )
         csc = sp.csc_array(matrix)
         vals = np.asarray(csc.data, dtype=np.float64)
         indices = np.asarray(csc.indices, dtype=np.int64)

@@ -145,7 +145,9 @@ fn compute_sum_row_mapping(shape: &[usize], axes: &[i64]) -> Vec<i64> {
 
 /// Process trace operation
 ///
-/// Extracts the diagonal entries and sums them.
+/// Sums the diagonal entries of each `n x n` matrix in a `(*batch, n, n)`
+/// argument, producing one output row per batch element (a 2-D argument is
+/// a batch of one).
 pub fn process_trace(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     if lin_op.args.is_empty() {
         return SparseTensor::empty((1, ctx.var_length as usize + 1));
@@ -159,21 +161,26 @@ pub fn process_trace(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         return tensor;
     }
 
-    let n = arg_shape[0]; // Assumes square matrix
+    let n = arg_shape[arg_shape.len() - 1]; // Assumes square trailing dims
+    let batch_size: usize = arg_shape[..arg_shape.len() - 2].iter().product();
 
-    // Diagonal entry (i, i) has Fortran-order flat index i + i*n = i*(n+1);
-    // every multiple of n+1 below n*n is on the diagonal, so an O(1)
-    // arithmetic test replaces scanning an index list per entry.
+    // In F-order the batch axes vary fastest, so entry (b, i, j) sits at
+    // b + batch_size * (i + n * j). On the diagonal (j == i) the matrix part
+    // i * (n + 1) is a multiple of n + 1, which an O(1) arithmetic test
+    // detects; the batch index is the output row.
     let step = (n + 1) as i64;
+    let batch = batch_size as i64;
 
-    // Select diagonal entries and sum to single row
-    let mut result =
-        SparseTensor::with_capacity((1, ctx.var_length as usize + 1), tensor.nnz() / n.max(1));
+    let mut result = SparseTensor::with_capacity(
+        (batch_size, ctx.var_length as usize + 1),
+        tensor.nnz() / n.max(1),
+    );
 
     for i in 0..tensor.nnz() {
         let row = tensor.rows[i];
-        if row % step == 0 {
-            result.push(tensor.data[i], 0, tensor.cols[i], tensor.param_offsets[i]);
+        let (b, matrix_idx) = (row % batch, row / batch);
+        if matrix_idx % step == 0 {
+            result.push(tensor.data[i], b, tensor.cols[i], tensor.param_offsets[i]);
         }
     }
 
@@ -799,5 +806,34 @@ mod tests {
 
         // Should have 3 non-zeros (strict upper triangle)
         assert_eq!(tensor.nnz(), 3);
+    }
+
+    #[test]
+    fn test_trace_batched() {
+        // A (3, 2, 2) variable has three 2x2 matrices; trace yields 3 rows.
+        let ctx = make_ctx(12);
+        let var_op = LinOp {
+            op_type: OpType::Variable,
+            shape: vec![3, 2, 2],
+            args: vec![],
+            data: LinOpData::Int(1),
+        };
+        let trace_op = LinOp {
+            op_type: OpType::Trace,
+            shape: vec![3],
+            args: vec![var_op],
+            data: LinOpData::None,
+        };
+        let tensor = process_trace(&trace_op, &ctx);
+        assert_eq!(tensor.shape.0, 3);
+        assert_eq!(tensor.nnz(), 6);
+        for k in 0..tensor.nnz() {
+            // F-order flat index of (b, i, j) is b + 3 * (i + 2 * j); diagonal
+            // entries are b + 9 * i and land in output row b.
+            let col = tensor.cols[k];
+            assert_eq!(tensor.rows[k], col % 3);
+            assert_eq!((col / 3) % 3, 0);
+            assert_eq!(tensor.data[k], 1.0);
+        }
     }
 }

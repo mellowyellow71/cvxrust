@@ -3616,3 +3616,63 @@ class TestTransformedParameterReshape:
         assert val_scipy is not None
         assert val_coo is not None
         np.testing.assert_allclose(val_scipy, val_coo, rtol=1e-3, atol=1e-6)
+
+
+_ND_STACK_XFAIL = pytest.mark.xfail(
+    strict=True,
+    reason="upstream: N-D hstack and concatenate(axis=None) canonicalize in F-order "
+    "flat order, which disagrees with numpy (and expr.value) on every backend",
+)
+
+_AFFINE_ORACLE_CASES = [
+    pytest.param((3, 2, 2), cp.trace, id="trace-batched"),
+    pytest.param((2, 3, 2, 2), cp.trace, id="trace-batched-4d"),
+    pytest.param((3, 2, 2), lambda x: cp.vstack([x, x]), id="vstack-3d"),
+    pytest.param((2, 3, 2, 2), lambda x: cp.vstack([x, x]), id="vstack-4d"),
+    pytest.param((4,), lambda x: cp.vstack([x, x, x]), id="vstack-1d-args"),
+    pytest.param((3, 2, 2), lambda x: cp.concatenate([x, x], axis=1), id="concat-axis1-3d"),
+    pytest.param((3, 2, 2), lambda x: cp.concatenate([x, x], axis=2), id="concat-axis2-3d"),
+    pytest.param(
+        (2, 2, 2),
+        lambda x: cp.multiply(sp.coo_array(np.eye(2)[None] * [[[1.0]], [[-2.0]]]), x),
+        id="sparse-3d-const-mul_elem",
+    ),
+    pytest.param((3, 2, 2), lambda x: cp.hstack([x, x]), id="hstack-3d", marks=_ND_STACK_XFAIL),
+    pytest.param(
+        (2, 3),
+        lambda x: cp.concatenate([x, x], axis=None),
+        id="concat-axis-none-2d",
+        marks=_ND_STACK_XFAIL,
+    ),
+]
+
+
+@pytest.mark.parametrize("shape,build", _AFFINE_ORACLE_CASES)
+@pytest.mark.parametrize(
+    "backend_name",
+    [s.SCIPY_CANON_BACKEND, s.COO_CANON_BACKEND, s.RUST_CANON_BACKEND],
+)
+def test_affine_map_matches_numeric_value(backend_name, shape, build, request):
+    """The stuffed affine map applied to a point must equal the atom's numeric value.
+
+    Regression test for RUST-only N-D bugs (3-D sparse constants, N-D vstack row
+    order, batched trace) and a direct numeric oracle for every backend: comparing
+    backends with each other cannot catch a bug they all share.
+    """
+    if backend_name == s.RUST_CANON_BACKEND and not s.rust_backend_available():
+        pytest.skip("cvxpy_rust extension not built")
+    if backend_name == s.COO_CANON_BACKEND and "sparse-3d" in request.node.callspec.id:
+        pytest.xfail("upstream: COO raises 'inconsistent shapes' on N-D sparse constants")
+
+    x = cp.Variable(shape)
+    x0 = np.arange(1.0, x.size + 1).reshape(shape)
+    expr = build(x)
+    prob = cp.Problem(cp.Minimize(0), [expr == 0])
+    data, _, _ = prob.get_problem_data(cp.CLARABEL, canon_backend=backend_name)
+
+    x.value = x0
+    expected = expr.value
+    if sp.issparse(expected):
+        expected = expected.toarray()
+    mapped = data["A"] @ x0.ravel(order="F") + np.asarray(data["b"]).ravel()
+    np.testing.assert_allclose(mapped.reshape(expr.shape, order="F"), expected)
