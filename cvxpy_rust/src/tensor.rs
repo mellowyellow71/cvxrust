@@ -4,7 +4,6 @@
 //! in coordinate (COO) format, matching CVXPY's TensorRepresentation.
 
 use rayon::prelude::*;
-use std::collections::HashMap;
 
 /// Constant ID used for non-parametric entries
 pub const CONSTANT_ID: i64 = -1;
@@ -230,34 +229,44 @@ impl SparseTensor {
         result
     }
 
-    /// General row selection using HashMap (fallback)
+    /// General row selection: each old row maps to the (possibly several, possibly
+    /// no) new rows that select it. The map is a dense CSR-style table indexed by
+    /// old row, built in O(n_old + len(row_indices)); a HashMap here cost more
+    /// than the rest of the build on strided permutations (vstack of wide rows).
     fn select_rows_general(&self, row_indices: &[i64]) -> SparseTensor {
-        // Build mapping from old row to new positions
-        let mut row_map: HashMap<i64, Vec<usize>> = HashMap::with_capacity(row_indices.len());
-        for (new_idx, &old_row) in row_indices.iter().enumerate() {
-            row_map.entry(old_row).or_default().push(new_idx);
+        let n_old = self.shape.0;
+        let mut starts = vec![0usize; n_old + 1];
+        for &old_row in row_indices {
+            if (0..n_old as i64).contains(&old_row) {
+                starts[old_row as usize + 1] += 1;
+            }
         }
-
-        // Estimate capacity
-        let mut result = SparseTensor::with_capacity(
-            (row_indices.len(), self.shape.1),
-            self.nnz() * row_indices.len() / self.shape.0.max(1),
-        );
-
-        // Select entries
-        for i in 0..self.nnz() {
-            if let Some(new_positions) = row_map.get(&self.rows[i]) {
-                for &new_row in new_positions {
-                    result.push(
-                        self.data[i],
-                        new_row as i64,
-                        self.cols[i],
-                        self.param_offsets[i],
-                    );
-                }
+        for r in 0..n_old {
+            starts[r + 1] += starts[r];
+        }
+        let mut cursor = starts.clone();
+        let mut new_rows = vec![0i64; starts[n_old]];
+        for (new_idx, &old_row) in row_indices.iter().enumerate() {
+            if (0..n_old as i64).contains(&old_row) {
+                new_rows[cursor[old_row as usize]] = new_idx as i64;
+                cursor[old_row as usize] += 1;
             }
         }
 
+        let mut result = SparseTensor::with_capacity(
+            (row_indices.len(), self.shape.1),
+            self.nnz() * row_indices.len() / n_old.max(1),
+        );
+        for i in 0..self.nnz() {
+            let old_row = self.rows[i];
+            if !(0..n_old as i64).contains(&old_row) {
+                continue;
+            }
+            let r = old_row as usize;
+            for &new_row in &new_rows[starts[r]..starts[r + 1]] {
+                result.push(self.data[i], new_row, self.cols[i], self.param_offsets[i]);
+            }
+        }
         result
     }
 }

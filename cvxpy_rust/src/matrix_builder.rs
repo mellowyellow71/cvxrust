@@ -75,7 +75,17 @@ pub fn build_matrix_internal(
         process_constraints_sequential(lin_ops, &row_offsets, &ctx, total_nnz, total_rows)
     };
 
-    BuildMatrixResult::from_tensor(combined, param_size_plus_one as usize)
+    let assemble_start = std::time::Instant::now();
+    let nnz = combined.nnz();
+    let result = BuildMatrixResult::from_tensor(combined, param_size_plus_one as usize);
+    if crate::operations::profiling() {
+        eprintln!(
+            "[cvxpy_rust] assemble (flatten + sort) nnz={} {:.1}ms",
+            nnz,
+            assemble_start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+    result
 }
 
 /// Process constraints sequentially into a single pre-allocated output buffer.

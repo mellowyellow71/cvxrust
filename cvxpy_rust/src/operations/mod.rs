@@ -49,10 +49,38 @@ impl ProcessingContext {
     }
 }
 
+/// Whether `CVXPY_RUST_PROFILE=1` is set (read once).
+pub fn profiling() -> bool {
+    static FLAG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FLAG.get_or_init(|| std::env::var("CVXPY_RUST_PROFILE").as_deref() == Ok("1"))
+}
+
 /// Process a LinOp node and its children recursively
 ///
 /// This is the main entry point for converting a LinOp tree to a SparseTensor.
+/// With `CVXPY_RUST_PROFILE=1`, every node that takes at least 1 ms
+/// (inclusive of its children) is reported on stderr.
 pub fn process_linop(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
+    if !profiling() {
+        return dispatch(lin_op, ctx);
+    }
+    let start = std::time::Instant::now();
+    let result = dispatch(lin_op, ctx);
+    let ms = start.elapsed().as_secs_f64() * 1000.0;
+    if ms >= 1.0 {
+        eprintln!(
+            "[cvxpy_rust] op {:?} shape={:?} args={} out_nnz={} inclusive={:.1}ms",
+            lin_op.op_type,
+            lin_op.shape,
+            lin_op.args.len(),
+            result.nnz(),
+            ms
+        );
+    }
+    result
+}
+
+fn dispatch(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     match lin_op.op_type {
         // Leaf nodes
         OpType::Variable => leaf::process_variable(lin_op, ctx),
