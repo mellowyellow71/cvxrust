@@ -1006,6 +1006,44 @@ class TestRustBackend:
         rust_result = rust_backend.build_matrix([trace_op])
         self.compare_matrices(scipy_result, rust_result)
 
+    def test_shared_subtree_serialized_once(self):
+        """A LinOp reached through several args edges is emitted once, then referenced."""
+        from cvxpy.lin_ops.backends.rust_backend import _OP_TYPE_MAP, serialize_linop_trees
+
+        n = 4
+        var = linOpHelper(shape=(n,), type="variable", data=1, args=[])
+        shared = linOpHelper(shape=(n,), type="neg", args=[var])
+        tree = linOpHelper(shape=(n,), type="sum", args=[shared, shared, shared])
+        meta, _, _ = serialize_linop_trees([tree])
+        codes = list(meta)
+        assert codes.count(_OP_TYPE_MAP["def"]) == 1
+        assert codes.count(_OP_TYPE_MAP["ref"]) == 2
+        assert codes.count(_OP_TYPE_MAP["neg"]) == 1
+
+        scipy_backend, rust_backend = self.get_backends(
+            id_to_col={1: 0},
+            param_to_size={CONSTANT_ID: 1},
+            param_to_col={CONSTANT_ID: 0},
+            param_size_plus_one=1,
+            var_length=n,
+        )
+        self.compare_matrices(scipy_backend.build_matrix([tree]), rust_backend.build_matrix([tree]))
+
+    def test_shared_leaf_and_data_not_memoized(self):
+        """Leaves and constant data subtrees stay plain so the fast paths see them."""
+        from cvxpy.lin_ops.backends.rust_backend import _OP_TYPE_MAP, serialize_linop_trees
+
+        var = linOpHelper(shape=(2,), type="variable", data=1, args=[])
+        const = linOpHelper(shape=(2, 2), type="dense_const", data=np.eye(2), args=[])
+        stacked = linOpHelper(shape=(4, 2), type="vstack", args=[const, const])
+        mul = linOpHelper(shape=(4,), type="mul", data=stacked, args=[var])
+        tree = linOpHelper(shape=(4,), type="sum", args=[mul, mul])
+        meta, _, _ = serialize_linop_trees([tree])
+        codes = list(meta)
+        assert codes.count(_OP_TYPE_MAP["def"]) == 1  # the mul node
+        assert codes.count(_OP_TYPE_MAP["ref"]) == 1
+        assert codes.count(_OP_TYPE_MAP["vstack"]) == 1  # data subtree emitted plainly
+
 
 @pytest.mark.skipif(not RUST_AVAILABLE, reason="cvxpy_rust not installed")
 class TestRustBackendEndToEnd:
@@ -1237,3 +1275,29 @@ class TestRustBackendEndToEnd:
             prob.solve(solver=cp.CLARABEL, canon_backend=cp.RUST_CANON_BACKEND)
             assert prob.status == cp.OPTIMAL
             np.testing.assert_allclose(prob.value, scipy_val, atol=1e-5)
+
+    @pytest.mark.parametrize("n_constraints", [2, 8])
+    def test_shared_expression_across_constraints(self, n_constraints):
+        """One affine expression object reused in many constraints (sequential and parallel)."""
+        import cvxpy as cp
+
+        np.random.seed(3)
+        m, n = 6, 5
+        A = np.random.randn(m, n)
+        x = cp.Variable(n)
+        p = cp.Parameter(m)
+        p.value = np.random.randn(m)
+        y = A @ x + p  # shared DAG node
+        constraints = [y <= i + 1 for i in range(n_constraints)] + [cp.sum(y) >= -50]
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(y) + cp.sum(x)), constraints)
+
+        data_scipy, _, _ = prob.get_problem_data(cp.CLARABEL, canon_backend=cp.SCIPY_CANON_BACKEND)
+        prob = cp.Problem(prob.objective, prob.constraints)
+        data_rust, _, _ = prob.get_problem_data(cp.CLARABEL, canon_backend=cp.RUST_CANON_BACKEND)
+        for key in ("A", "b", "c", "P"):
+            if data_scipy.get(key) is None:
+                continue
+            a, b = data_scipy[key], data_rust[key]
+            if hasattr(a, "toarray"):
+                a, b = a.toarray(), b.toarray()
+            np.testing.assert_allclose(a, b, atol=1e-12)

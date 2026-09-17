@@ -83,6 +83,11 @@ pub enum OpType {
 
     // No-op
     NoOp,
+
+    /// Stream marker: the next node is shared subtree `id` (deserializer only)
+    Def,
+    /// Use of shared subtree `id` (data: Int(id))
+    Ref,
 }
 
 impl OpType {
@@ -117,6 +122,8 @@ impl OpType {
             25 => Ok(OpType::KronR),
             26 => Ok(OpType::KronL),
             27 => Ok(OpType::NoOp),
+            28 => Ok(OpType::Def),
+            29 => Ok(OpType::Ref),
             _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Unknown op type int: {}",
                 i
@@ -155,6 +162,8 @@ impl OpType {
             "kron_r" => Ok(OpType::KronR),
             "kron_l" => Ok(OpType::KronL),
             "no_op" => Ok(OpType::NoOp),
+            "def" => Ok(OpType::Def),
+            "ref" => Ok(OpType::Ref),
             _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Unknown operation type: {}",
                 s
@@ -483,6 +492,8 @@ pub struct DeserializationContext<'a> {
     float_data: &'a [f64],
     int_data: &'a [i64],
     pub cursor: usize,
+    /// Shared subtrees by id, filled by `Def` markers (see `take_shared`).
+    shared: Vec<Option<LinOp>>,
 }
 
 impl<'a> DeserializationContext<'a> {
@@ -492,7 +503,24 @@ impl<'a> DeserializationContext<'a> {
             float_data,
             int_data,
             cursor: 0,
+            shared: Vec::new(),
         }
+    }
+
+    /// The shared subtrees, in id order; every id must have been defined.
+    pub fn take_shared(&mut self) -> PyResult<Vec<LinOp>> {
+        std::mem::take(&mut self.shared)
+            .into_iter()
+            .enumerate()
+            .map(|(id, node)| {
+                node.ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Shared node {} referenced but never defined",
+                        id
+                    ))
+                })
+            })
+            .collect()
     }
 
     /// True when the whole metadata stream has been consumed.
@@ -525,6 +553,23 @@ impl<'a> DeserializationContext<'a> {
 
         let num_args = self.next()? as usize;
         let data_tag = self.next()?;
+
+        if op_type == OpType::Def {
+            // [Def, ndim, shape.., 1, 1, id] then the shared subtree itself.
+            // Store the subtree and leave a Ref in its place.
+            let id = self.next()? as usize;
+            let node = self.read_linop()?;
+            if self.shared.len() <= id {
+                self.shared.resize_with(id + 1, || None);
+            }
+            self.shared[id] = Some(node);
+            return Ok(LinOp {
+                op_type: OpType::Ref,
+                shape,
+                args: Vec::new(),
+                data: LinOpData::Int(id as i64),
+            });
+        }
 
         let data = if data_tag == 6 {
             // LinOpRef: the data LinOp is serialized inline, before the args

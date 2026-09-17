@@ -190,6 +190,7 @@ mod tests {
             param_to_size,
             var_length: 10,
             param_size_plus_one: 3,
+            shared: Default::default(),
         }
     }
 

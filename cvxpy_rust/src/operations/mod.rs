@@ -12,6 +12,26 @@ use crate::linop::{LinOp, LinOpData, OpType};
 use crate::tensor::SparseTensor;
 use std::collections::HashMap;
 
+/// A LinOp subtree that several parents share (a DAG node), lowered once.
+///
+/// The serializer emits a shared subtree at its first occurrence and a `Ref`
+/// to it afterwards; the tensor is computed on first use and cloned on every
+/// use, which is also safe under the parallel constraint pass.
+#[derive(Debug)]
+pub struct SharedNode {
+    pub lin_op: LinOp,
+    pub tensor: std::sync::OnceLock<SparseTensor>,
+}
+
+impl SharedNode {
+    pub fn new(lin_op: LinOp) -> Self {
+        SharedNode {
+            lin_op,
+            tensor: std::sync::OnceLock::new(),
+        }
+    }
+}
+
 /// Context for processing LinOp trees
 #[derive(Clone)]
 pub struct ProcessingContext {
@@ -20,6 +40,8 @@ pub struct ProcessingContext {
     pub param_to_col: HashMap<i64, i64>,
     pub var_length: i64,
     pub param_size_plus_one: i64,
+    /// Shared subtrees indexed by the id carried in `Ref` nodes.
+    pub shared: std::sync::Arc<Vec<SharedNode>>,
 }
 
 impl ProcessingContext {
@@ -119,9 +141,28 @@ fn dispatch(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         OpType::KronR => specialized::process_kron_r(lin_op, ctx),
         OpType::KronL => specialized::process_kron_l(lin_op, ctx),
 
+        // Shared subtree: lowered once, cloned per use
+        OpType::Ref | OpType::Def => {
+            let node = shared_node(lin_op, ctx);
+            node.tensor
+                .get_or_init(|| process_linop(&node.lin_op, ctx))
+                .clone()
+        }
+
         // No-op
         OpType::NoOp => SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1)),
     }
+}
+
+/// The shared subtree a `Ref` node points at.
+fn shared_node<'a>(lin_op: &LinOp, ctx: &'a ProcessingContext) -> &'a SharedNode {
+    let id = match &lin_op.data {
+        LinOpData::Int(id) => *id as usize,
+        _ => panic!("Ref node must carry the shared node id"),
+    };
+    ctx.shared
+        .get(id)
+        .unwrap_or_else(|| panic!("Ref to unknown shared node {}", id))
 }
 
 /// Count the exact number of non-zeros a LinOp tree will produce.
@@ -228,6 +269,8 @@ pub fn count_nnz(lin_op: &LinOp, _ctx: &ProcessingContext) -> usize {
             let arg_nnz = lin_op.args.first().map_or(1, |a| count_nnz(a, _ctx));
             data_size * arg_nnz
         }
+
+        OpType::Ref | OpType::Def => count_nnz(&shared_node(lin_op, _ctx).lin_op, _ctx),
 
         OpType::NoOp => 0,
     }

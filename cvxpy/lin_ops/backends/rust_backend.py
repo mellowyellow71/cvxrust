@@ -47,6 +47,8 @@ _OP_TYPE_MAP = {
     "broadcast_to": 15, "hstack": 16, "vstack": 17, "concatenate": 18,
     "sum_entries": 19, "trace": 20, "diag_vec": 21, "diag_mat": 22,
     "upper_tri": 23, "conv": 24, "kron_r": 25, "kron_l": 26, "no_op": 27,
+    # Stream markers for shared subtrees (DAG nodes), see serialize_linop_trees
+    "def": 28, "ref": 29,
 }
 
 # Op types whose data field is itself a LinOp tree
@@ -182,6 +184,20 @@ def _nd_parametric_matmul_expansion(
     )
 
 
+def _shared_nodes(lin_ops: list[LinOp]) -> set[int]:
+    """ids of the interior LinOps reached through more than one ``args`` edge."""
+    counts: dict[int, int] = {}
+    stack = list(lin_ops)
+    while stack:
+        node = stack.pop()
+        key = id(node)
+        seen = counts.get(key, 0)
+        counts[key] = seen + 1
+        if seen == 0 and node.args:
+            stack.extend(node.args)
+    return {key for key, n in counts.items() if n >= 2}
+
+
 def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
     """
     Serialize a list of LinOp trees into flat buffers for the Rust backend.
@@ -206,7 +222,18 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
       6=LinOpRef: () — the data LinOp follows inline, before this node's args
       7=AxisData: (kind 0|1|2, [value | n, *axes], keepdims)
       8=ConcatAxis: (has, value)
+
+    Shared subtrees: a LinOp object reached through more than one ``args``
+    edge (a DAG node, e.g. one affine expression used in several constraints)
+    is emitted once, wrapped as ``[def, ndim, *shape, 1, 1, id]`` followed by
+    the node itself, and as ``[ref, ndim, *shape, 0, 1, id]`` at every later
+    occurrence. Rust lowers it once and reuses the tensor. Data subtrees
+    (constant operands of mul/rmul/...) are always emitted in full so the
+    constant-extraction fast paths keep seeing plain nodes.
     """
+    shared = _shared_nodes(lin_ops)
+    defined: dict[int, int] = {}
+
     meta: list[int] = []
     float_chunks: list[np.ndarray] = []
     int_chunks: list[np.ndarray] = []
@@ -276,7 +303,7 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
             extend((op_map["mul"], 1, out_size * in_size, 1, 6))
             _emit_sparse(op_map["sparse_const"], expansion.shape, 0, expansion)
             extend((op_map["reshape"], 1, int(np.prod(data.shape)), 1, 0))
-            _serialize_node(data)
+            _serialize_node(data, False)
             extend((op_map["reshape"], 1, in_size, 1, 0))
             _serialize_node(arg)
             return
@@ -292,12 +319,21 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
         extend((op_map["reshape"], 1, in_size, 1, 0))
         _serialize_node(arg)
 
-    def _serialize_node(lin_op):
+    def _serialize_node(lin_op, memo=True):
         nonlocal float_offset, int_offset
 
         t = lin_op.type
         shape = lin_op.shape
         nargs = len(lin_op.args)
+
+        if memo and nargs and shared and id(lin_op) in shared:
+            ref_id = defined.get(id(lin_op))
+            if ref_id is not None:
+                extend((op_map["ref"], len(shape), *shape, 0, 1, ref_id))
+                return
+            ref_id = len(defined)
+            defined[id(lin_op)] = ref_id
+            extend((op_map["def"], len(shape), *shape, 1, 1, ref_id))
         data = lin_op.data
 
         has_data_linop = False
@@ -374,9 +410,9 @@ def serialize_linop_trees(lin_ops: list[LinOp]) -> tuple:
         else:
             extend((op_map[t], len(shape), *shape, nargs, 0))
 
-        # If data is a LinOp, serialize it BEFORE args
+        # If data is a LinOp, serialize it BEFORE args (never memoized)
         if has_data_linop:
-            _serialize_node(data)
+            _serialize_node(data, False)
 
         # Serialize args in order
         for arg in lin_op.args:

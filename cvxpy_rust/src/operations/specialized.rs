@@ -660,6 +660,7 @@ mod tests {
             param_to_size,
             var_length,
             param_size_plus_one: 1,
+            shared: Default::default(),
         }
     }
 

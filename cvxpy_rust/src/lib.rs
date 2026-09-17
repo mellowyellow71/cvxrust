@@ -58,6 +58,7 @@ fn build_matrix<'py>(
     let result = py.detach(|| {
         build_matrix_internal(
             &rust_lin_ops,
+            vec![],
             param_size_plus_one,
             &id_to_col,
             &param_to_size,
@@ -125,6 +126,7 @@ fn build_matrix_serialized<'py>(
     while !deser_ctx.done() {
         rust_lin_ops.push(deser_ctx.read_linop()?);
     }
+    let shared = deser_ctx.take_shared()?;
 
     let deser_ms = t0.map(|t| t.elapsed().as_secs_f64() * 1000.0);
     let t1 = if profile {
@@ -137,6 +139,7 @@ fn build_matrix_serialized<'py>(
     let result = py.detach(|| {
         build_matrix_internal(
             &rust_lin_ops,
+            shared,
             param_size_plus_one,
             &id_to_col,
             &param_to_size,

@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 use crate::linop::LinOp;
-use crate::operations::{count_nnz, process_linop, ProcessingContext};
+use crate::operations::{count_nnz, process_linop, ProcessingContext, SharedNode};
 use crate::tensor::{BuildMatrixResult, SparseTensor, CONSTANT_ID};
 
 /// Minimum number of constraints to consider parallel processing
@@ -23,6 +23,7 @@ const PARALLEL_MIN_WORK: usize = 500;
 /// The output can be directly used to construct a scipy.sparse.csc_array.
 pub fn build_matrix_internal(
     lin_ops: &[LinOp],
+    shared: Vec<LinOp>,
     param_size_plus_one: i64,
     id_to_col: &HashMap<i64, i64>,
     param_to_size: &HashMap<i64, i64>,
@@ -45,6 +46,7 @@ pub fn build_matrix_internal(
         param_to_col: full_param_to_col,
         var_length,
         param_size_plus_one,
+        shared: std::sync::Arc::new(shared.into_iter().map(SharedNode::new).collect()),
     };
 
     // Compute row offsets for each constraint
@@ -176,6 +178,7 @@ mod tests {
 
         let result = build_matrix_internal(
             &[lin_op],
+            vec![],
             3, // param_size_plus_one
             &id_to_col,
             &param_to_size,
@@ -206,8 +209,15 @@ mod tests {
             data: LinOpData::None,
         };
 
-        let result =
-            build_matrix_internal(&[neg_op], 3, &id_to_col, &param_to_size, &param_to_col, 6);
+        let result = build_matrix_internal(
+            &[neg_op],
+            vec![],
+            3,
+            &id_to_col,
+            &param_to_size,
+            &param_to_col,
+            6,
+        );
 
         assert_eq!(result.data.len(), 2);
         assert_eq!(result.data, vec![-1.0, -1.0]);
@@ -233,6 +243,7 @@ mod tests {
 
         let result = build_matrix_internal(
             &[var_op1, var_op2],
+            vec![],
             3,
             &id_to_col,
             &param_to_size,
@@ -258,10 +269,61 @@ mod tests {
             data: LinOpData::Float(5.0),
         };
 
-        let result =
-            build_matrix_internal(&[const_op], 3, &id_to_col, &param_to_size, &param_to_col, 6);
+        let result = build_matrix_internal(
+            &[const_op],
+            vec![],
+            3,
+            &id_to_col,
+            &param_to_size,
+            &param_to_col,
+            6,
+        );
 
         assert_eq!(result.data.len(), 1);
         assert_eq!(result.data[0], 5.0);
+    }
+
+    #[test]
+    fn test_shared_subtree_lowered_once_and_reused() {
+        let (id_to_col, param_to_col, param_to_size) = make_test_ctx();
+
+        // Shared subtree: -x for a 2-vector, referenced twice in a sum.
+        let neg_x = LinOp {
+            op_type: OpType::Neg,
+            shape: vec![2],
+            args: vec![LinOp {
+                op_type: OpType::Variable,
+                shape: vec![2],
+                args: vec![],
+                data: LinOpData::Int(0),
+            }],
+            data: LinOpData::None,
+        };
+        let reference = || LinOp {
+            op_type: OpType::Ref,
+            shape: vec![2],
+            args: vec![],
+            data: LinOpData::Int(0),
+        };
+        let sum = LinOp {
+            op_type: OpType::Sum,
+            shape: vec![2],
+            args: vec![reference(), reference()],
+            data: LinOpData::None,
+        };
+
+        let result = build_matrix_internal(
+            &[sum],
+            vec![neg_x],
+            3,
+            &id_to_col,
+            &param_to_size,
+            &param_to_col,
+            6,
+        );
+
+        // Two uses of -x coalesce to -2 on the variable's two columns.
+        assert_eq!(result.data, vec![-2.0, -2.0]);
+        assert_eq!(result.rows, vec![0, 3]); // flat row = col * n_rows + row, n_rows = 2
     }
 }

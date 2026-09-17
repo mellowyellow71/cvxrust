@@ -473,6 +473,7 @@ fn extract_matrix_from_linop(lin_op: &LinOp, _ctx: &ProcessingContext) -> Consta
         param_to_size,
         var_length: 0,
         param_size_plus_one: 1,
+        shared: Default::default(),
     };
 
     // Process the LinOp to get a tensor
@@ -1470,6 +1471,7 @@ mod tests {
             param_to_size,
             var_length: 4,
             param_size_plus_one: 1,
+            shared: Default::default(),
         }
     }
 
@@ -1519,6 +1521,7 @@ mod tests {
             param_to_size,
             var_length: 6,
             param_size_plus_one: 1,
+            shared: Default::default(),
         };
 
         // A = [[1, 0, 2], [0, 3, 4]] stored column-major
@@ -1590,6 +1593,7 @@ mod tests {
             param_to_size,
             var_length: 8,
             param_size_plus_one: 1,
+            shared: Default::default(),
         };
 
         let var1 = LinOp {
@@ -1750,6 +1754,7 @@ mod tests {
             param_to_size,
             var_length: 2,
             param_size_plus_one: 1,
+            shared: Default::default(),
         };
 
         // Create variable (2,)
@@ -1824,6 +1829,7 @@ mod grouped_kernel_tests {
             param_to_size,
             var_length,
             param_size_plus_one: 5,
+            shared: Default::default(),
         }
     }
 

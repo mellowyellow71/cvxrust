@@ -486,6 +486,7 @@ mod tests {
             param_to_size,
             var_length,
             param_size_plus_one: 1,
+            shared: Default::default(),
         }
     }
 
@@ -562,6 +563,7 @@ mod tests {
             param_to_size,
             var_length: 8,
             param_size_plus_one: 1,
+            shared: Default::default(),
         };
 
         let var1 = LinOp {
@@ -610,6 +612,7 @@ mod tests {
             param_to_size,
             var_length: 8,
             param_size_plus_one: 1,
+            shared: Default::default(),
         };
 
         let var1 = LinOp {
