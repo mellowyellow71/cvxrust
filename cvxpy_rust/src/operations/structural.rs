@@ -14,21 +14,19 @@ pub fn process_index(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         return SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1));
     }
 
-    // Get slice data
+    let row_indices = index_row_indices(lin_op);
+    // Only the selected rows of the argument are needed.
+    let tensor = super::partial::process_arg_rows(&lin_op.args[0], ctx, &row_indices);
+    tensor.select_rows(&row_indices)
+}
+
+/// The argument's flat row selected by each output row of an Index node.
+pub(crate) fn index_row_indices(lin_op: &LinOp) -> Vec<i64> {
     let slices = match &lin_op.data {
         LinOpData::Slices(s) => s,
         _ => panic!("Index operation must have slice data"),
     };
-
-    // Process the argument
-    let tensor = process_linop(&lin_op.args[0], ctx);
-
-    // Compute the row indices to select
-    let arg_shape = &lin_op.args[0].shape;
-    let row_indices = compute_slice_indices(slices, arg_shape);
-
-    // Select the rows
-    tensor.select_rows(&row_indices)
+    compute_slice_indices(slices, &lin_op.args[0].shape)
 }
 
 /// Compute flat row indices from slice specifications
@@ -97,6 +95,12 @@ pub fn process_transpose(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTenso
         return SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1));
     }
 
+    let tensor = process_linop(&lin_op.args[0], ctx);
+    tensor.select_rows(&transpose_row_indices(lin_op))
+}
+
+/// The argument's flat row that lands at each output row of a Transpose node.
+pub(crate) fn transpose_row_indices(lin_op: &LinOp) -> Vec<i64> {
     // Get axes permutation
     let axes = match &lin_op.data {
         LinOpData::AxisData {
@@ -111,16 +115,7 @@ pub fn process_transpose(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTenso
         }
         _ => panic!("Transpose operation must have axis data"),
     };
-
-    // Process the argument
-    let tensor = process_linop(&lin_op.args[0], ctx);
-
-    // Compute row permutation
-    let original_shape = &lin_op.args[0].shape;
-    let row_indices = compute_transpose_indices(original_shape, &axes);
-
-    // Apply permutation by selecting rows
-    tensor.select_rows(&row_indices)
+    compute_transpose_indices(&lin_op.args[0].shape, &axes)
 }
 
 /// Compute row indices for transposition

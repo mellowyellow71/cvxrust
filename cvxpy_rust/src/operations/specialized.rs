@@ -153,16 +153,44 @@ pub fn process_trace(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         return SparseTensor::empty((1, ctx.var_length as usize + 1));
     }
 
-    // Process the argument
-    let tensor = process_linop(&lin_op.args[0], ctx);
     let arg_shape = &lin_op.args[0].shape;
-
     if arg_shape.len() < 2 {
-        return tensor;
+        return process_linop(&lin_op.args[0], ctx);
     }
+    let out_rows: Vec<i64> = (0..lin_op.size() as i64).collect();
+    let needed = trace_arg_rows(lin_op, &out_rows);
+    // Only the diagonal rows of the argument are needed.
+    let tensor = super::partial::process_arg_rows(&lin_op.args[0], ctx, &needed);
+    trace_apply(lin_op, tensor, ctx)
+}
 
+/// Batch geometry of a trace argument: (n, batch_size).
+fn trace_dims(lin_op: &LinOp) -> (usize, usize) {
+    let arg_shape = &lin_op.args[0].shape;
     let n = arg_shape[arg_shape.len() - 1]; // Assumes square trailing dims
     let batch_size: usize = arg_shape[..arg_shape.len() - 2].iter().product();
+    (n, batch_size)
+}
+
+/// The argument's flat rows (the diagonals) that the given output rows read.
+pub(crate) fn trace_arg_rows(lin_op: &LinOp, out_rows: &[i64]) -> Vec<i64> {
+    let (n, batch_size) = trace_dims(lin_op);
+    let mut rows = Vec::with_capacity(out_rows.len() * n);
+    for &b in out_rows {
+        for i in 0..n as i64 {
+            rows.push(b + (batch_size * (n + 1)) as i64 * i);
+        }
+    }
+    rows
+}
+
+/// Sum each batch element's diagonal of an already-lowered argument.
+pub(crate) fn trace_apply(
+    lin_op: &LinOp,
+    tensor: SparseTensor,
+    ctx: &ProcessingContext,
+) -> SparseTensor {
+    let (n, batch_size) = trace_dims(lin_op);
 
     // In F-order the batch axes vary fastest, so entry (b, i, j) sits at
     // b + batch_size * (i + n * j). On the diagonal (j == i) the matrix part
@@ -247,24 +275,44 @@ pub fn process_diag_mat(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor
         return SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1));
     }
 
-    // Get diagonal offset k
+    let out_rows: Vec<i64> = (0..lin_op.shape[0] as i64).collect();
+    let needed = diag_mat_arg_rows(lin_op, &out_rows);
+    // Only the diagonal rows of the argument are needed.
+    let tensor = super::partial::process_arg_rows(&lin_op.args[0], ctx, &needed);
+    diag_mat_apply(lin_op, tensor, ctx)
+}
+
+/// Diagonal geometry of a diag_mat node: (step, offset) such that output row
+/// i reads the argument's flat row i * step + offset.
+fn diag_mat_geometry(lin_op: &LinOp) -> (i64, i64) {
     let k = match &lin_op.data {
         LinOpData::Int(k) => *k,
         _ => 0,
     };
-
-    // Process the argument
-    let tensor = process_linop(&lin_op.args[0], ctx);
-    let arg_shape = &lin_op.args[0].shape;
-
-    let rows = lin_op.shape[0]; // Output size
-    let orig_rows = arg_shape.first().copied().unwrap_or(1);
-
+    let orig_rows = lin_op.args[0].shape.first().copied().unwrap_or(1);
     // The diagonal flat index for output row i is i*(orig_rows+1) + offset
     // (offset = k*orig_rows for k>0, -k for k<0, 0 for k=0), so the reverse
     // mapping is O(1) arithmetic instead of scanning an index list per entry.
     let step = (orig_rows + 1) as i64;
     let offset: i64 = if k > 0 { k * orig_rows as i64 } else { -k };
+    (step, offset)
+}
+
+/// The argument's flat rows that the given output rows of a diag_mat read.
+pub(crate) fn diag_mat_arg_rows(lin_op: &LinOp, out_rows: &[i64]) -> Vec<i64> {
+    let (step, offset) = diag_mat_geometry(lin_op);
+    out_rows.iter().map(|&i| i * step + offset).collect()
+}
+
+/// Select the diagonal of an already-lowered argument.
+pub(crate) fn diag_mat_apply(
+    lin_op: &LinOp,
+    tensor: SparseTensor,
+    ctx: &ProcessingContext,
+) -> SparseTensor {
+    let rows = lin_op.shape[0]; // Output size
+    let orig_rows = lin_op.args[0].shape.first().copied().unwrap_or(1);
+    let (step, offset) = diag_mat_geometry(lin_op);
 
     let mut result = SparseTensor::with_capacity(
         (rows, ctx.var_length as usize + 1),

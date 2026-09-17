@@ -85,7 +85,7 @@ pub fn process_mul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     } else {
         None
     };
-    let result = multiply_block_diagonal(&lhs_data, &rhs, lin_op, ctx, false);
+    let result = multiply_block_diagonal(&lhs_data, &rhs, lin_op, ctx, None);
     let multiply_ms = t1.map(|t| t.elapsed().as_secs_f64() * 1000.0);
 
     if profile {
@@ -147,7 +147,7 @@ pub fn process_rmul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
     let rhs_data = get_constant_matrix_data_for_rmul(rhs_linop, &lin_op.args[0], ctx);
 
     // Perform block diagonal multiplication from right
-    multiply_block_diagonal_right(&lhs, &rhs_data, lin_op, ctx)
+    multiply_block_diagonal_right(&lhs, &rhs_data, lin_op, ctx, None)
 }
 
 /// Get constant matrix data for RMul, with special handling for 1D arrays
@@ -155,7 +155,7 @@ pub fn process_rmul(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 /// For RMul (X @ A), a 1D array 'a' should be:
 /// - Column vector (n, 1) if X has n columns (standard matrix-vector product)
 /// - Row vector (1, n) if X has 1 column (broadcast-like behavior)
-fn get_constant_matrix_data_for_rmul(
+pub(crate) fn get_constant_matrix_data_for_rmul(
     lin_op: &LinOp,
     arg: &LinOp,
     ctx: &ProcessingContext,
@@ -224,14 +224,21 @@ pub fn process_mul_elem(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor
         return SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1));
     }
 
+    let arg_tensor = process_linop(&lin_op.args[0], ctx);
+    mul_elem_apply(lin_op, arg_tensor, ctx)
+}
+
+/// Elementwise multiply an already-lowered argument by the node's data.
+pub(crate) fn mul_elem_apply(
+    lin_op: &LinOp,
+    arg_tensor: SparseTensor,
+    ctx: &ProcessingContext,
+) -> SparseTensor {
     // Get the data LinOp
     let data_linop = match &lin_op.data {
         LinOpData::LinOpRef(inner) => inner.as_ref(),
         _ => panic!("MulElem operation must have LinOp data"),
     };
-
-    // Process the argument tensor
-    let arg_tensor = process_linop(&lin_op.args[0], ctx);
 
     // Process the data as a tensor to preserve parametric structure
     let data_tensor = process_linop(data_linop, ctx);
@@ -338,14 +345,21 @@ pub fn process_div(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
         return SparseTensor::empty((lin_op.size(), ctx.var_length as usize + 1));
     }
 
+    let tensor = process_linop(&lin_op.args[0], ctx);
+    div_apply(lin_op, tensor, ctx)
+}
+
+/// Divide an already-lowered argument elementwise by the node's data.
+pub(crate) fn div_apply(
+    lin_op: &LinOp,
+    mut tensor: SparseTensor,
+    ctx: &ProcessingContext,
+) -> SparseTensor {
     // Get the constant data
     let data_linop = match &lin_op.data {
         LinOpData::LinOpRef(inner) => inner.as_ref(),
         _ => panic!("Div operation must have LinOp data"),
     };
-
-    // Process the argument
-    let mut tensor = process_linop(&lin_op.args[0], ctx);
 
     // Get constant data as flat array (in column-major order)
     let data = get_constant_vector_data(data_linop, Some(ctx));
@@ -373,7 +387,10 @@ pub fn process_div(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
 /// Helper: extract constant matrix data from a LinOp (2D case)
 /// For left multiplication, 1D arrays are treated as row vectors (1, n)
 /// ctx is optional but required for complex LinOp types (Hstack, Vstack, Transpose, etc.)
-fn get_constant_matrix_data(lin_op: &LinOp, ctx: Option<&ProcessingContext>) -> ConstantMatrix {
+pub(crate) fn get_constant_matrix_data(
+    lin_op: &LinOp,
+    ctx: Option<&ProcessingContext>,
+) -> ConstantMatrix {
     use crate::linop::OpType;
 
     // First check op_type to handle complex constant expressions
@@ -673,7 +690,7 @@ fn extract_constant_values_from_tensor(tensor: &SparseTensor, size: usize) -> Ve
 
 /// Representation of constant matrix data
 #[derive(Debug, Clone)]
-enum ConstantMatrix {
+pub(crate) enum ConstantMatrix {
     Scalar(f64),
     /// Dense matrix stored in column-major (F-order) format
     /// This avoids costly conversions since CVXPY uses F-order internally
@@ -702,7 +719,7 @@ enum ConstantMatrix {
 /// wrapped in Reshape or single-arg Sum nodes (both are no-ops on the COO
 /// tensor). Index/Promote wrappers are NOT identities and must not be
 /// unwrapped here.
-fn as_plain_variable(lin_op: &LinOp) -> Option<i64> {
+pub(crate) fn as_plain_variable(lin_op: &LinOp) -> Option<i64> {
     use crate::linop::OpType;
     match lin_op.op_type {
         OpType::Variable => match &lin_op.data {
@@ -740,7 +757,7 @@ fn checked_num_blocks(arg_size: usize, a_cols: usize) -> Option<usize> {
 ///
 /// Returns None when the constant's shape doesn't tile the variable evenly;
 /// the caller falls back to the general path.
-fn mul_const_by_variable(
+pub(crate) fn mul_const_by_variable(
     lhs: &ConstantMatrix,
     var_id: i64,
     arg_size: usize,
@@ -871,12 +888,15 @@ fn mul_const_by_variable(
 }
 
 /// Block diagonal multiplication from left: kron(I, A) @ tensor
-fn multiply_block_diagonal(
+///
+/// `wanted` (sorted, unique output rows) restricts the work and the output to
+/// those rows; `None` produces every row.
+pub(crate) fn multiply_block_diagonal(
     lhs: &ConstantMatrix,
     rhs: &SparseTensor,
     lin_op: &LinOp,
     ctx: &ProcessingContext,
-    _transpose_lhs: bool,
+    wanted: Option<&[i64]>,
 ) -> SparseTensor {
     let output_rows = lin_op.size();
 
@@ -886,7 +906,10 @@ fn multiply_block_diagonal(
             let mut result = rhs.clone();
             result.scale_in_place(*s);
             result.shape = (output_rows, ctx.var_length as usize + 1);
-            result
+            match wanted {
+                Some(rows) => super::partial::filter_rows(result, rows),
+                None => result,
+            }
         }
         // Column l of A is the contribution of tensor row (block, l).
         ConstantMatrix::DenseColMajor { data, rows, cols } => multiply_grouped(
@@ -897,6 +920,7 @@ fn multiply_block_diagonal(
             Side::Left,
             output_rows,
             ctx,
+            wanted,
         ),
         ConstantMatrix::DenseRowMajor { data, rows, cols } => {
             let col_major = row_major_to_col_major(data, *rows, *cols);
@@ -908,6 +932,7 @@ fn multiply_block_diagonal(
                 Side::Left,
                 output_rows,
                 ctx,
+                wanted,
             )
         }
         ConstantMatrix::Sparse {
@@ -928,6 +953,7 @@ fn multiply_block_diagonal(
             Side::Left,
             output_rows,
             ctx,
+            wanted,
         ),
     }
 }
@@ -940,11 +966,12 @@ fn multiply_block_diagonal(
 /// - The operation is kron(A^T, I_k) @ vec(X)
 ///
 /// Row l of A (column l of A^T) is the contribution of tensor row (l, i).
-fn multiply_block_diagonal_right(
+pub(crate) fn multiply_block_diagonal_right(
     lhs: &SparseTensor,
     rhs: &ConstantMatrix,
     lin_op: &LinOp,
     ctx: &ProcessingContext,
+    wanted: Option<&[i64]>,
 ) -> SparseTensor {
     let output_rows = lin_op.size();
 
@@ -954,7 +981,10 @@ fn multiply_block_diagonal_right(
             let mut result = lhs.clone();
             result.scale_in_place(*s);
             result.shape = (output_rows, ctx.var_length as usize + 1);
-            result
+            match wanted {
+                Some(rows) => super::partial::filter_rows(result, rows),
+                None => result,
+            }
         }
         // Row-major A is column-major A^T.
         ConstantMatrix::DenseRowMajor { data, rows, cols } => multiply_grouped(
@@ -965,6 +995,7 @@ fn multiply_block_diagonal_right(
             Side::Right,
             output_rows,
             ctx,
+            wanted,
         ),
         ConstantMatrix::DenseColMajor { data, rows, cols } => {
             let transposed = col_major_to_row_major(data, *rows, *cols);
@@ -976,6 +1007,7 @@ fn multiply_block_diagonal_right(
                 Side::Right,
                 output_rows,
                 ctx,
+                wanted,
             )
         }
         ConstantMatrix::Sparse {
@@ -1000,6 +1032,7 @@ fn multiply_block_diagonal_right(
                 Side::Right,
                 output_rows,
                 ctx,
+                wanted,
             )
         }
     }
@@ -1046,9 +1079,10 @@ fn multiply_grouped(
     side: Side,
     output_rows: usize,
     ctx: &ProcessingContext,
+    wanted: Option<&[i64]>,
 ) -> SparseTensor {
     let shape = (output_rows, ctx.var_length as usize + 1);
-    if n_out == 0 || n_in == 0 || tensor.nnz() == 0 {
+    if n_out == 0 || n_in == 0 || tensor.nnz() == 0 || wanted.is_some_and(|w| w.is_empty()) {
         return SparseTensor::empty(shape);
     }
     let n_buckets = output_rows / n_out;
@@ -1093,15 +1127,62 @@ fn multiply_grouped(
         }
     }
 
+    // Wanted output positions per bucket (CSR by bucket, sorted within), when
+    // the caller only needs some output rows: buckets with none are skipped
+    // and the dense accumulation touches only those positions.
+    let wanted_by_bucket: Option<(Vec<usize>, Vec<usize>)> = wanted.map(|rows| {
+        let mut w_starts = vec![0usize; n_buckets + 1];
+        let split_out = |r: usize| -> (usize, usize) {
+            match side {
+                Side::Left => (r / n_out, r % n_out),
+                Side::Right => (r % n_buckets, r / n_buckets),
+            }
+        };
+        for &r in rows {
+            let (b, _) = split_out(r as usize);
+            if (r as usize) < output_rows {
+                w_starts[b + 1] += 1;
+            }
+        }
+        for b in 0..n_buckets {
+            w_starts[b + 1] += w_starts[b];
+        }
+        let mut w_cursor = w_starts.clone();
+        let mut positions = vec![0usize; w_starts[n_buckets]];
+        for &r in rows {
+            let (b, o) = split_out(r as usize);
+            if (r as usize) < output_rows {
+                positions[w_cursor[b]] = o;
+                w_cursor[b] += 1;
+            }
+        }
+        for b in 0..n_buckets {
+            positions[w_starts[b]..w_starts[b + 1]].sort_unstable();
+        }
+        (w_starts, positions)
+    });
+
     let mut result = SparseTensor::with_capacity(shape, nnz);
     let mut acc = vec![0.0f64; n_out];
     let mut touched: Vec<usize> = Vec::new();
     let mut is_touched = vec![false; n_out];
+    let mut is_wanted = vec![false; n_out];
 
     for bucket in 0..n_buckets {
         let group_ids = &mut order[starts[bucket]..starts[bucket + 1]];
         if group_ids.is_empty() {
             continue;
+        }
+        let bucket_wanted: Option<&[usize]> = wanted_by_bucket
+            .as_ref()
+            .map(|(w_starts, positions)| &positions[w_starts[bucket]..w_starts[bucket + 1]]);
+        if bucket_wanted.is_some_and(|w| w.is_empty()) {
+            continue;
+        }
+        if let Some(w) = bucket_wanted {
+            for &o in w {
+                is_wanted[o] = true;
+            }
         }
         group_ids.sort_unstable_by_key(|&i| (tensor.cols[i], tensor.param_offsets[i]));
 
@@ -1120,8 +1201,17 @@ fn multiply_grouped(
                 match contribution {
                     Contribution::Dense(data) => {
                         let column = &data[l * n_out..(l + 1) * n_out];
-                        for (cell, &a) in acc.iter_mut().zip(column) {
-                            *cell += a * v;
+                        match bucket_wanted {
+                            Some(w) => {
+                                for &o in w {
+                                    acc[o] += column[o] * v;
+                                }
+                            }
+                            None => {
+                                for (cell, &a) in acc.iter_mut().zip(column) {
+                                    *cell += a * v;
+                                }
+                            }
                         }
                     }
                     Contribution::Sparse {
@@ -1142,8 +1232,16 @@ fn multiply_grouped(
                 h += 1;
             }
 
-            match contribution {
-                Contribution::Dense(_) => {
+            match (contribution, bucket_wanted) {
+                (Contribution::Dense(_), Some(w)) => {
+                    for &o in w {
+                        if acc[o] != 0.0 {
+                            result.push(acc[o], out_row(bucket, o), col, param);
+                            acc[o] = 0.0;
+                        }
+                    }
+                }
+                (Contribution::Dense(_), None) => {
                     for (o, cell) in acc.iter_mut().enumerate() {
                         if *cell != 0.0 {
                             result.push(*cell, out_row(bucket, o), col, param);
@@ -1151,10 +1249,10 @@ fn multiply_grouped(
                         }
                     }
                 }
-                Contribution::Sparse { .. } => {
+                (Contribution::Sparse { .. }, _) => {
                     touched.sort_unstable();
                     for &o in &touched {
-                        if acc[o] != 0.0 {
+                        if acc[o] != 0.0 && (bucket_wanted.is_none() || is_wanted[o]) {
                             result.push(acc[o], out_row(bucket, o), col, param);
                         }
                         acc[o] = 0.0;
@@ -1164,6 +1262,11 @@ fn multiply_grouped(
                 }
             }
             g = h;
+        }
+        if let Some(w) = bucket_wanted {
+            for &o in w {
+                is_wanted[o] = false;
+            }
         }
     }
 
@@ -1224,7 +1327,7 @@ fn csc_to_csr(
 }
 
 /// Check if a LinOp tree contains any parameter nodes
-fn is_parametric(lin_op: &LinOp) -> bool {
+pub(crate) fn is_parametric(lin_op: &LinOp) -> bool {
     use crate::linop::OpType;
 
     match lin_op.op_type {
@@ -1557,7 +1660,7 @@ mod tests {
             LinOpData::LinOpRef(inner) => get_constant_matrix_data(inner, Some(&ctx)),
             _ => unreachable!(),
         };
-        let slow = multiply_block_diagonal(&lhs_data, &rhs, &mul_op, &ctx, false);
+        let slow = multiply_block_diagonal(&lhs_data, &rhs, &mul_op, &ctx, None);
 
         // nnz(A) = 4, two blocks
         assert_eq!(fast.nnz(), 8);
@@ -1881,6 +1984,22 @@ mod grouped_kernel_tests {
         m
     }
 
+    /// Every other output row, as a sorted `wanted` list.
+    fn some_rows(output_rows: usize) -> Vec<i64> {
+        (0..output_rows as i64).step_by(2).collect()
+    }
+
+    fn only_rows(
+        reference: &HashMap<(i64, i64, i64), f64>,
+        rows: &[i64],
+    ) -> HashMap<(i64, i64, i64), f64> {
+        reference
+            .iter()
+            .filter(|((r, _, _), _)| rows.contains(r))
+            .map(|(k, v)| (*k, *v))
+            .collect()
+    }
+
     fn assert_same(result: &SparseTensor, reference: &HashMap<(i64, i64, i64), f64>) {
         let mut keys = HashSet::new();
         for i in 0..result.nnz() {
@@ -1945,8 +2064,14 @@ mod grouped_kernel_tests {
                 cols: a_cols,
             };
             assert_same(
-                &multiply_block_diagonal(&dense, &tensor, &op, &c, false),
+                &multiply_block_diagonal(&dense, &tensor, &op, &c, None),
                 &reference,
+            );
+            let rows = some_rows(output_rows);
+            let partial = only_rows(&reference, &rows);
+            assert_same(
+                &multiply_block_diagonal(&dense, &tensor, &op, &c, Some(&rows)),
+                &partial,
             );
 
             let row_major = ConstantMatrix::DenseRowMajor {
@@ -1955,7 +2080,7 @@ mod grouped_kernel_tests {
                 cols: a_cols,
             };
             assert_same(
-                &multiply_block_diagonal(&row_major, &tensor, &op, &c, false),
+                &multiply_block_diagonal(&row_major, &tensor, &op, &c, None),
                 &reference,
             );
 
@@ -1968,8 +2093,12 @@ mod grouped_kernel_tests {
                 cols: a_cols,
             };
             assert_same(
-                &multiply_block_diagonal(&sparse, &tensor, &op, &c, false),
+                &multiply_block_diagonal(&sparse, &tensor, &op, &c, None),
                 &reference,
+            );
+            assert_same(
+                &multiply_block_diagonal(&sparse, &tensor, &op, &c, Some(&rows)),
+                &partial,
             );
             let _ = trial;
         }
@@ -2004,8 +2133,14 @@ mod grouped_kernel_tests {
                 cols: p,
             };
             assert_same(
-                &multiply_block_diagonal_right(&tensor, &dense, &op, &c),
+                &multiply_block_diagonal_right(&tensor, &dense, &op, &c, None),
                 &reference,
+            );
+            let rows = some_rows(output_rows);
+            let partial = only_rows(&reference, &rows);
+            assert_same(
+                &multiply_block_diagonal_right(&tensor, &dense, &op, &c, Some(&rows)),
+                &partial,
             );
 
             let row_major = ConstantMatrix::DenseRowMajor {
@@ -2014,7 +2149,7 @@ mod grouped_kernel_tests {
                 cols: p,
             };
             assert_same(
-                &multiply_block_diagonal_right(&tensor, &row_major, &op, &c),
+                &multiply_block_diagonal_right(&tensor, &row_major, &op, &c, None),
                 &reference,
             );
 
@@ -2027,8 +2162,12 @@ mod grouped_kernel_tests {
                 cols: p,
             };
             assert_same(
-                &multiply_block_diagonal_right(&tensor, &sparse, &op, &c),
+                &multiply_block_diagonal_right(&tensor, &sparse, &op, &c, None),
                 &reference,
+            );
+            assert_same(
+                &multiply_block_diagonal_right(&tensor, &sparse, &op, &c, Some(&rows)),
+                &partial,
             );
         }
     }

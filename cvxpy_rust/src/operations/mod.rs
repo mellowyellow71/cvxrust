@@ -5,6 +5,7 @@
 
 mod arithmetic;
 mod leaf;
+mod partial;
 mod specialized;
 mod structural;
 
