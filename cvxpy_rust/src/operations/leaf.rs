@@ -218,13 +218,13 @@ mod tests {
             op_type: OpType::ScalarConst,
             shape: vec![],
             args: vec![],
-            data: LinOpData::Float(3.14),
+            data: LinOpData::Float(2.5),
         };
 
         let tensor = process_scalar_const(&lin_op, &ctx);
 
         assert_eq!(tensor.nnz(), 1);
-        assert_eq!(tensor.data, vec![3.14]);
+        assert_eq!(tensor.data, vec![2.5]);
         assert_eq!(tensor.cols[0], 10); // Constant column (var_length)
     }
 

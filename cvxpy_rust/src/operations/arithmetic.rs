@@ -858,13 +858,27 @@ fn multiply_block_diagonal(
             result.shape = (output_rows, ctx.var_length as usize + 1);
             result
         }
-        ConstantMatrix::DenseColMajor { data, rows, cols } => {
-            // Dense block diagonal multiplication with column-major data
-            multiply_dense_block_diagonal_colmajor(data, *rows, *cols, rhs, output_rows, ctx)
-        }
+        // Column l of A is the contribution of tensor row (block, l).
+        ConstantMatrix::DenseColMajor { data, rows, cols } => multiply_grouped(
+            &Contribution::Dense(data),
+            *rows,
+            *cols,
+            rhs,
+            Side::Left,
+            output_rows,
+            ctx,
+        ),
         ConstantMatrix::DenseRowMajor { data, rows, cols } => {
-            // Dense block diagonal multiplication with row-major data
-            multiply_dense_block_diagonal_rowmajor(data, *rows, *cols, rhs, output_rows, ctx)
+            let col_major = row_major_to_col_major(data, *rows, *cols);
+            multiply_grouped(
+                &Contribution::Dense(&col_major),
+                *rows,
+                *cols,
+                rhs,
+                Side::Left,
+                output_rows,
+                ctx,
+            )
         }
         ConstantMatrix::Sparse {
             values,
@@ -872,181 +886,30 @@ fn multiply_block_diagonal(
             col_indptr,
             rows,
             cols,
-        } => {
-            // Sparse block diagonal multiplication
-            multiply_sparse_block_diagonal(
+        } => multiply_grouped(
+            &Contribution::Sparse {
                 values,
-                row_indices,
-                col_indptr,
-                *rows,
-                *cols,
-                rhs,
-                output_rows,
-                ctx,
-            )
-        }
+                indices: row_indices,
+                indptr: col_indptr,
+            },
+            *rows,
+            *cols,
+            rhs,
+            Side::Left,
+            output_rows,
+            ctx,
+        ),
     }
-}
-
-/// Dense block diagonal multiplication with column-major data: kron(I_k, A) @ tensor
-///
-/// Direct element-by-element processing with pre-allocated output.
-#[inline]
-fn multiply_dense_block_diagonal_colmajor(
-    data: &[f64],
-    a_rows: usize,
-    a_cols: usize,
-    rhs: &SparseTensor,
-    output_rows: usize,
-    ctx: &ProcessingContext,
-) -> SparseTensor {
-    // Guard against edge cases
-    if a_cols == 0 || a_rows == 0 || rhs.nnz() == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
-    }
-
-    // Pre-allocate with exact capacity
-    let exact_nnz = rhs.nnz() * a_rows;
-    let mut rows = Vec::with_capacity(exact_nnz);
-    let mut cols = Vec::with_capacity(exact_nnz);
-    let mut vals = Vec::with_capacity(exact_nnz);
-    let mut params = Vec::with_capacity(exact_nnz);
-
-    // Direct processing with pre-computed column starts
-    for idx in 0..rhs.nnz() {
-        let rhs_row = rhs.rows[idx] as usize;
-        let rhs_col = rhs.cols[idx];
-        let rhs_val = rhs.data[idx];
-        let rhs_param = rhs.param_offsets[idx];
-
-        let block = rhs_row / a_cols;
-        let col_in_block = rhs_row % a_cols;
-        let row_offset = block * a_rows;
-        let col_start = col_in_block * a_rows;
-
-        // Emit scaled column of A - iterate using slice for better cache behavior
-        let a_col = &data[col_start..col_start + a_rows];
-        for (i, &a_val) in a_col.iter().enumerate() {
-            if a_val != 0.0 {
-                let new_row = row_offset + i;
-                if new_row < output_rows {
-                    rows.push(new_row as i64);
-                    cols.push(rhs_col);
-                    vals.push(a_val * rhs_val);
-                    params.push(rhs_param);
-                }
-            }
-        }
-    }
-
-    SparseTensor {
-        shape: (output_rows, ctx.var_length as usize + 1),
-        rows,
-        cols,
-        data: vals,
-        param_offsets: params,
-    }
-}
-
-/// Dense block diagonal multiplication with row-major data: kron(I_k, A) @ tensor
-/// Used for 1D arrays (row vectors) - typically small, so keep simple implementation
-#[inline]
-fn multiply_dense_block_diagonal_rowmajor(
-    data: &[f64],
-    a_rows: usize,
-    a_cols: usize,
-    rhs: &SparseTensor,
-    output_rows: usize,
-    ctx: &ProcessingContext,
-) -> SparseTensor {
-    // Guard against edge cases
-    if a_cols == 0 || a_rows == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
-    }
-
-    // Row-major is only used for 1D arrays (row vectors), which are small
-    // Keep simple implementation - not worth faer overhead for 1-row matrices
-    let est_nnz = rhs.nnz() * a_rows;
-    let mut result =
-        SparseTensor::with_capacity((output_rows, ctx.var_length as usize + 1), est_nnz);
-
-    for idx in 0..rhs.nnz() {
-        let rhs_row = rhs.rows[idx] as usize;
-        let rhs_col = rhs.cols[idx];
-        let rhs_val = rhs.data[idx];
-        let rhs_param = rhs.param_offsets[idx];
-
-        let block = rhs_row / a_cols;
-        let col_in_block = rhs_row % a_cols;
-
-        // Row-major data: element (i, j) at index i * cols + j
-        for i in 0..a_rows {
-            let a_val = data[i * a_cols + col_in_block];
-            if a_val != 0.0 {
-                let new_row = (block * a_rows + i) as i64;
-                result.push(a_val * rhs_val, new_row, rhs_col, rhs_param);
-            }
-        }
-    }
-
-    result
-}
-
-/// Sparse block diagonal multiplication: kron(I_k, A) @ tensor
-fn multiply_sparse_block_diagonal(
-    values: &[f64],
-    row_indices: &[i64],
-    col_indptr: &[i64],
-    a_rows: usize,
-    a_cols: usize,
-    rhs: &SparseTensor,
-    output_rows: usize,
-    ctx: &ProcessingContext,
-) -> SparseTensor {
-    // Guard against division by zero
-    if a_cols == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
-    }
-
-    // Number of blocks (unused but documents the algorithm)
-    let _k = rhs.shape.0 / a_cols;
-
-    // Estimate output nnz
-    let est_nnz = rhs.nnz() * values.len() / a_cols.max(1);
-    let mut result =
-        SparseTensor::with_capacity((output_rows, ctx.var_length as usize + 1), est_nnz);
-
-    // For each entry in rhs, compute its contribution
-    for idx in 0..rhs.nnz() {
-        let rhs_row = rhs.rows[idx] as usize;
-        let rhs_col = rhs.cols[idx];
-        let rhs_val = rhs.data[idx];
-        let rhs_param = rhs.param_offsets[idx];
-
-        // Determine which block and column in block
-        let block = rhs_row / a_cols;
-        let col_in_block = rhs_row % a_cols;
-
-        // Get non-zeros in column col_in_block of A
-        if col_in_block < col_indptr.len() - 1 {
-            let start = col_indptr[col_in_block] as usize;
-            let end = col_indptr[col_in_block + 1] as usize;
-
-            for nnz_idx in start..end {
-                let a_row = row_indices[nnz_idx] as usize;
-                let a_val = values[nnz_idx];
-                if a_val != 0.0 {
-                    let new_row = (block * a_rows + a_row) as i64;
-                    result.push(a_val * rhs_val, new_row, rhs_col, rhs_param);
-                }
-            }
-        }
-    }
-
-    result
 }
 
 /// Block diagonal multiplication from right: tensor @ kron(I_k, A^T)
+///
+/// For X @ A where X has shape (k, n) and A has shape (n, p):
+/// - Input tensor represents vec(X) in column-major order
+/// - Output is vec(X @ A) in column-major order
+/// - The operation is kron(A^T, I_k) @ vec(X)
+///
+/// Row l of A (column l of A^T) is the contribution of tensor row (l, i).
 fn multiply_block_diagonal_right(
     lhs: &SparseTensor,
     rhs: &ConstantMatrix,
@@ -1063,13 +926,27 @@ fn multiply_block_diagonal_right(
             result.shape = (output_rows, ctx.var_length as usize + 1);
             result
         }
+        // Row-major A is column-major A^T.
+        ConstantMatrix::DenseRowMajor { data, rows, cols } => multiply_grouped(
+            &Contribution::Dense(data),
+            *cols,
+            *rows,
+            lhs,
+            Side::Right,
+            output_rows,
+            ctx,
+        ),
         ConstantMatrix::DenseColMajor { data, rows, cols } => {
-            // Dense block diagonal right multiplication with column-major data
-            multiply_dense_block_diagonal_right_colmajor(data, *rows, *cols, lhs, output_rows, ctx)
-        }
-        ConstantMatrix::DenseRowMajor { data, rows, cols } => {
-            // Dense block diagonal right multiplication with row-major data
-            multiply_dense_block_diagonal_right_rowmajor(data, *rows, *cols, lhs, output_rows, ctx)
+            let transposed = col_major_to_row_major(data, *rows, *cols);
+            multiply_grouped(
+                &Contribution::Dense(&transposed),
+                *cols,
+                *rows,
+                lhs,
+                Side::Right,
+                output_rows,
+                ctx,
+            )
         }
         ConstantMatrix::Sparse {
             values,
@@ -1078,14 +955,19 @@ fn multiply_block_diagonal_right(
             rows,
             cols,
         } => {
-            // Sparse block diagonal right multiplication
-            multiply_sparse_block_diagonal_right(
-                values,
-                row_indices,
-                col_indptr,
-                *rows,
+            // CSR of A is CSC of A^T.
+            let (t_values, t_indices, t_indptr) =
+                csc_to_csr(values, row_indices, col_indptr, *rows, *cols);
+            multiply_grouped(
+                &Contribution::Sparse {
+                    values: &t_values,
+                    indices: &t_indices,
+                    indptr: &t_indptr,
+                },
                 *cols,
+                *rows,
                 lhs,
+                Side::Right,
                 output_rows,
                 ctx,
             )
@@ -1093,201 +975,222 @@ fn multiply_block_diagonal_right(
     }
 }
 
-/// Dense block diagonal right multiplication with column-major data: kron(A^T, I_k) @ tensor
-/// For X @ A where X has shape (k, n) and A has shape (n, p):
-/// - Input tensor represents vec(X) in column-major order
-/// - Output is vec(X @ A) in column-major order
-/// - The operation is kron(A^T, I_k) @ vec(X)
+/// The matrix `M` (n_out x n_in) whose column `l` is what one unit of tensor
+/// row-part `l` contributes to the `n_out` output positions of its bucket.
+enum Contribution<'a> {
+    /// Column-major dense data, column `l` at `data[l * n_out..(l + 1) * n_out]`.
+    Dense(&'a [f64]),
+    /// CSC data over (n_out x n_in).
+    Sparse {
+        values: &'a [f64],
+        indices: &'a [i64],
+        indptr: &'a [i64],
+    },
+}
+
+/// Which side the constant multiplies on, i.e. how a tensor row splits into
+/// an independent bucket and the part `l` that selects a contribution column,
+/// and where a bucket's output positions land.
+#[derive(Clone, Copy)]
+enum Side {
+    /// kron(I_k, A) @ T: row = bucket * n_in + l, out_row = bucket * n_out + o.
+    Left,
+    /// vec(X @ A) with X (k, n): row = l * k + bucket, out_row = o * k + bucket.
+    Right,
+}
+
+/// Multiply a tensor by a block-structured constant, accumulating per
+/// (bucket, column, parameter) group into a dense workspace so every output
+/// entry is emitted exactly once.
 ///
-/// Direct element-by-element processing with pre-allocated output.
-#[inline]
-fn multiply_dense_block_diagonal_right_colmajor(
-    data: &[f64],
-    a_rows: usize, // n (rows of A = cols of X)
-    a_cols: usize, // p (cols of A = cols of output)
-    lhs: &SparseTensor,
-    output_rows: usize, // k * p (total elements in output)
+/// Entries of the same group are the only ones that can collide, so grouping
+/// them (counting sort by bucket, then a sort by (col, param) within the
+/// bucket) lets each group's products land in a workspace of `n_out` cells
+/// and be emitted coalesced. The old kernels pushed one entry per product and
+/// left the (often quadratic) coalescing to the global sort and SciPy.
+fn multiply_grouped(
+    contribution: &Contribution,
+    n_out: usize,
+    n_in: usize,
+    tensor: &SparseTensor,
+    side: Side,
+    output_rows: usize,
     ctx: &ProcessingContext,
 ) -> SparseTensor {
-    // Guard against edge cases
-    if a_cols == 0 || a_rows == 0 || lhs.nnz() == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
+    let shape = (output_rows, ctx.var_length as usize + 1);
+    if n_out == 0 || n_in == 0 || tensor.nnz() == 0 {
+        return SparseTensor::empty(shape);
+    }
+    let n_buckets = output_rows / n_out;
+    if n_buckets == 0 {
+        return SparseTensor::empty(shape);
     }
 
-    // k = number of rows in X (and in output)
-    let k = output_rows / a_cols;
-    if k == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
+    let split = |row: usize| -> (usize, usize) {
+        match side {
+            Side::Left => (row / n_in, row % n_in),
+            Side::Right => (row % n_buckets, row / n_buckets),
+        }
+    };
+    let out_row = |bucket: usize, o: usize| -> i64 {
+        match side {
+            Side::Left => (bucket * n_out + o) as i64,
+            Side::Right => (o * n_buckets + bucket) as i64,
+        }
+    };
+
+    // Counting sort of entry indices by bucket. Entries outside the output
+    // (bucket or part out of range) are dropped, as the bounds checks of the
+    // per-product kernels did.
+    let nnz = tensor.nnz();
+    let mut starts = vec![0usize; n_buckets + 1];
+    for &row in &tensor.rows {
+        let (bucket, l) = split(row as usize);
+        if bucket < n_buckets && l < n_in {
+            starts[bucket + 1] += 1;
+        }
     }
-
-    // Pre-allocate with exact capacity
-    let exact_nnz = lhs.nnz() * a_cols;
-    let mut rows = Vec::with_capacity(exact_nnz);
-    let mut cols = Vec::with_capacity(exact_nnz);
-    let mut vals = Vec::with_capacity(exact_nnz);
-    let mut params = Vec::with_capacity(exact_nnz);
-
-    // Direct processing
-    for idx in 0..lhs.nnz() {
-        let lhs_row = lhs.rows[idx] as usize;
-        let lhs_col = lhs.cols[idx];
-        let lhs_val = lhs.data[idx];
-        let lhs_param = lhs.param_offsets[idx];
-
-        let row_in_X = lhs_row % k;
-        let col_in_X = lhs_row / k;
-
-        // For each column j of A, emit contribution
-        // A is column-major: A[col_in_X, j] = data[j * a_rows + col_in_X]
-        for j in 0..a_cols {
-            let a_val = data[j * a_rows + col_in_X];
-            if a_val != 0.0 {
-                let out_row = j * k + row_in_X;
-                if out_row < output_rows {
-                    rows.push(out_row as i64);
-                    cols.push(lhs_col);
-                    vals.push(lhs_val * a_val);
-                    params.push(lhs_param);
-                }
-            }
+    for b in 0..n_buckets {
+        starts[b + 1] += starts[b];
+    }
+    let mut cursor = starts.clone();
+    let mut order = vec![0usize; starts[n_buckets]];
+    for (idx, &row) in tensor.rows.iter().enumerate() {
+        let (bucket, l) = split(row as usize);
+        if bucket < n_buckets && l < n_in {
+            order[cursor[bucket]] = idx;
+            cursor[bucket] += 1;
         }
     }
 
-    SparseTensor {
-        shape: (output_rows, ctx.var_length as usize + 1),
-        rows,
-        cols,
-        data: vals,
-        param_offsets: params,
-    }
-}
+    let mut result = SparseTensor::with_capacity(shape, nnz);
+    let mut acc = vec![0.0f64; n_out];
+    let mut touched: Vec<usize> = Vec::new();
+    let mut is_touched = vec![false; n_out];
 
-/// Dense block diagonal right multiplication with row-major data: kron(A^T, I_k) @ tensor
-/// Used for 1D arrays (row vectors)
-#[inline]
-fn multiply_dense_block_diagonal_right_rowmajor(
-    data: &[f64],
-    _a_rows: usize, // n (rows of A = cols of X) - unused but documents interface
-    a_cols: usize,  // p (cols of A = cols of output)
-    lhs: &SparseTensor,
-    output_rows: usize, // k * p (total elements in output)
-    ctx: &ProcessingContext,
-) -> SparseTensor {
-    // Guard against division by zero
-    if a_cols == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
-    }
-
-    // k = number of rows in X (and in output)
-    // output_rows = k * p, so k = output_rows / p
-    let k = output_rows / a_cols;
-
-    // Guard against division by zero for k
-    if k == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
-    }
-
-    let est_nnz = lhs.nnz() * a_cols;
-    let mut result =
-        SparseTensor::with_capacity((output_rows, ctx.var_length as usize + 1), est_nnz);
-
-    // For each entry in lhs tensor (representing variable X)
-    // Input uses column-major ordering: index v represents X[v % k, v / k]
-    for idx in 0..lhs.nnz() {
-        let lhs_row = lhs.rows[idx] as usize;
-        let lhs_col = lhs.cols[idx];
-        let lhs_val = lhs.data[idx];
-        let lhs_param = lhs.param_offsets[idx];
-
-        // Column-major decomposition of input index
-        // lhs_row represents X[row_in_X, col_in_X]
-        let row_in_X = lhs_row % k; // i = row in X
-        let col_in_X = lhs_row / k; // l = column in X (also row in A)
-
-        // For X @ A: (X @ A)[i, j] = sum_l X[i, l] * A[l, j]
-        // This input element X[i, l] contributes to all output columns j
-        // with coefficient A[l, j]
-        // Row-major data: A[l, j] at index l * a_cols + j
-        for j in 0..a_cols {
-            let a_val = data[col_in_X * a_cols + j]; // A[col_in_X, j] = A[l, j] in row-major
-            if a_val != 0.0 {
-                // Output index in column-major: (X@A)[i, j] at index j * k + i
-                let new_row = (j * k + row_in_X) as i64;
-                result.push(a_val * lhs_val, new_row, lhs_col, lhs_param);
-            }
+    for bucket in 0..n_buckets {
+        let group_ids = &mut order[starts[bucket]..starts[bucket + 1]];
+        if group_ids.is_empty() {
+            continue;
         }
-    }
+        group_ids.sort_unstable_by_key(|&i| (tensor.cols[i], tensor.param_offsets[i]));
 
-    result
-}
-
-/// Sparse block diagonal right multiplication: kron(A^T, I_k) @ tensor
-/// For X @ A where X has shape (k, n) and A has shape (n, p):
-/// - Input tensor represents vec(X) in column-major order
-/// - Output is vec(X @ A) in column-major order
-/// - A is stored in CSC format
-fn multiply_sparse_block_diagonal_right(
-    values: &[f64],
-    row_indices: &[i64],
-    col_indptr: &[i64],
-    a_rows: usize, // n (rows of A = cols of X)
-    a_cols: usize, // p (cols of A = cols of output)
-    lhs: &SparseTensor,
-    output_rows: usize, // k * p
-    ctx: &ProcessingContext,
-) -> SparseTensor {
-    // Guard against division by zero
-    if a_cols == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
-    }
-
-    // k = number of rows in X (and in output)
-    let k = output_rows / a_cols;
-
-    // Guard against division by zero for k
-    if k == 0 {
-        return SparseTensor::empty((output_rows, ctx.var_length as usize + 1));
-    }
-
-    let est_nnz = lhs.nnz() * values.len() / a_rows.max(1);
-    let mut result =
-        SparseTensor::with_capacity((output_rows, ctx.var_length as usize + 1), est_nnz);
-
-    // For each entry in lhs tensor (representing variable X)
-    for idx in 0..lhs.nnz() {
-        let lhs_row = lhs.rows[idx] as usize;
-        let lhs_col = lhs.cols[idx];
-        let lhs_val = lhs.data[idx];
-        let lhs_param = lhs.param_offsets[idx];
-
-        // Column-major decomposition: lhs_row represents X[row_in_X, col_in_X]
-        let row_in_X = lhs_row % k; // i = row in X
-        let col_in_X = lhs_row / k; // l = column in X (also row in A)
-
-        // For X @ A: (X @ A)[i, j] = sum_l X[i, l] * A[l, j]
-        // Find all A[l, j] entries (row l = col_in_X, any column j)
-        // CSC format: column j has entries at indices col_indptr[j] to col_indptr[j+1]
-        for j in 0..a_cols {
-            if j < col_indptr.len() - 1 {
-                let start = col_indptr[j] as usize;
-                let end = col_indptr[j + 1] as usize;
-
-                // Search for row col_in_X in column j
-                for nnz_idx in start..end {
-                    if row_indices[nnz_idx] as usize == col_in_X {
-                        let a_val = values[nnz_idx];
-                        if a_val != 0.0 {
-                            // Output index in column-major: (X@A)[i, j] at index j * k + i
-                            let new_row = (j * k + row_in_X) as i64;
-                            result.push(a_val * lhs_val, new_row, lhs_col, lhs_param);
+        let mut g = 0;
+        while g < group_ids.len() {
+            let col = tensor.cols[group_ids[g]];
+            let param = tensor.param_offsets[group_ids[g]];
+            let mut h = g;
+            while h < group_ids.len()
+                && tensor.cols[group_ids[h]] == col
+                && tensor.param_offsets[group_ids[h]] == param
+            {
+                let idx = group_ids[h];
+                let (_, l) = split(tensor.rows[idx] as usize);
+                let v = tensor.data[idx];
+                match contribution {
+                    Contribution::Dense(data) => {
+                        let column = &data[l * n_out..(l + 1) * n_out];
+                        for (cell, &a) in acc.iter_mut().zip(column) {
+                            *cell += a * v;
+                        }
+                    }
+                    Contribution::Sparse {
+                        values,
+                        indices,
+                        indptr,
+                    } => {
+                        for p in indptr[l] as usize..indptr[l + 1] as usize {
+                            let o = indices[p] as usize;
+                            acc[o] += values[p] * v;
+                            if !is_touched[o] {
+                                is_touched[o] = true;
+                                touched.push(o);
+                            }
                         }
                     }
                 }
+                h += 1;
             }
+
+            match contribution {
+                Contribution::Dense(_) => {
+                    for (o, cell) in acc.iter_mut().enumerate() {
+                        if *cell != 0.0 {
+                            result.push(*cell, out_row(bucket, o), col, param);
+                            *cell = 0.0;
+                        }
+                    }
+                }
+                Contribution::Sparse { .. } => {
+                    touched.sort_unstable();
+                    for &o in &touched {
+                        if acc[o] != 0.0 {
+                            result.push(acc[o], out_row(bucket, o), col, param);
+                        }
+                        acc[o] = 0.0;
+                        is_touched[o] = false;
+                    }
+                    touched.clear();
+                }
+            }
+            g = h;
         }
     }
 
     result
+}
+
+/// Row-major (rows x cols) data to column-major.
+fn row_major_to_col_major(data: &[f64], rows: usize, cols: usize) -> Vec<f64> {
+    let mut out = vec![0.0; rows * cols];
+    for i in 0..rows {
+        for j in 0..cols {
+            out[j * rows + i] = data[i * cols + j];
+        }
+    }
+    out
+}
+
+/// Column-major (rows x cols) data to row-major.
+fn col_major_to_row_major(data: &[f64], rows: usize, cols: usize) -> Vec<f64> {
+    let mut out = vec![0.0; rows * cols];
+    for j in 0..cols {
+        for i in 0..rows {
+            out[i * cols + j] = data[j * rows + i];
+        }
+    }
+    out
+}
+
+/// CSC (rows x cols) to CSR: (values, column indices, row pointers).
+fn csc_to_csr(
+    values: &[f64],
+    row_indices: &[i64],
+    col_indptr: &[i64],
+    rows: usize,
+    cols: usize,
+) -> (Vec<f64>, Vec<i64>, Vec<i64>) {
+    let nnz = values.len();
+    let mut row_ptr = vec![0i64; rows + 1];
+    for &r in row_indices {
+        row_ptr[r as usize + 1] += 1;
+    }
+    for r in 0..rows {
+        row_ptr[r + 1] += row_ptr[r];
+    }
+    let mut cursor = row_ptr.clone();
+    let mut out_values = vec![0.0; nnz];
+    let mut out_cols = vec![0i64; nnz];
+    for j in 0..cols.min(col_indptr.len().saturating_sub(1)) {
+        for p in col_indptr[j] as usize..col_indptr[j + 1] as usize {
+            let r = row_indices[p] as usize;
+            let dst = cursor[r] as usize;
+            out_values[dst] = values[p];
+            out_cols[dst] = j as i64;
+            cursor[r] += 1;
+        }
+    }
+    (out_values, out_cols, row_ptr)
 }
 
 /// Check if a LinOp tree contains any parameter nodes
@@ -1852,5 +1755,246 @@ mod tests {
         // Values should be 1/2 and 1/4
         assert!((tensor.data[0] - 0.5).abs() < 1e-10);
         assert!((tensor.data[1] - 0.25).abs() < 1e-10);
+    }
+}
+
+#[cfg(test)]
+mod grouped_kernel_tests {
+    //! The grouped kernel against a per-product reference, on random inputs
+    //! with duplicate keys and several parameter slices.
+    use super::*;
+    use crate::linop::OpType;
+    use crate::tensor::CONSTANT_ID;
+    use std::collections::{HashMap, HashSet};
+
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            self.0 >> 33
+        }
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+        fn value(&mut self) -> f64 {
+            (self.next() % 7) as f64 - 3.0
+        }
+    }
+
+    fn ctx(var_length: i64) -> ProcessingContext {
+        let mut param_to_col = HashMap::new();
+        param_to_col.insert(CONSTANT_ID, 0);
+        let mut param_to_size = HashMap::new();
+        param_to_size.insert(CONSTANT_ID, 1);
+        ProcessingContext {
+            id_to_col: HashMap::new(),
+            param_to_col,
+            param_to_size,
+            var_length,
+            param_size_plus_one: 5,
+        }
+    }
+
+    /// Random column-major (rows x cols) matrix, about half zeros.
+    fn random_matrix(rng: &mut Lcg, rows: usize, cols: usize) -> Vec<f64> {
+        (0..rows * cols)
+            .map(|_| if rng.below(2) == 0 { 0.0 } else { rng.value() })
+            .collect()
+    }
+
+    fn to_csc(data: &[f64], rows: usize, cols: usize) -> (Vec<f64>, Vec<i64>, Vec<i64>) {
+        let mut values = vec![];
+        let mut indices = vec![];
+        let mut indptr = vec![0i64];
+        for j in 0..cols {
+            for i in 0..rows {
+                let v = data[j * rows + i];
+                if v != 0.0 {
+                    values.push(v);
+                    indices.push(i as i64);
+                }
+            }
+            indptr.push(values.len() as i64);
+        }
+        (values, indices, indptr)
+    }
+
+    /// Random tensor with `n_rows` rows, deliberately repeating keys.
+    fn random_tensor(rng: &mut Lcg, n_rows: usize, n_cols: usize, nnz: usize) -> SparseTensor {
+        let mut t = SparseTensor::empty((n_rows, n_cols));
+        for _ in 0..nnz {
+            let param = [CONSTANT_ID, 0, 3][rng.below(3)];
+            t.push(
+                rng.value(),
+                rng.below(n_rows) as i64,
+                rng.below(n_cols) as i64,
+                param,
+            );
+        }
+        t
+    }
+
+    fn accumulate(t: &SparseTensor) -> HashMap<(i64, i64, i64), f64> {
+        let mut m = HashMap::new();
+        for i in 0..t.nnz() {
+            *m.entry((t.rows[i], t.cols[i], t.param_offsets[i]))
+                .or_insert(0.0) += t.data[i];
+        }
+        m
+    }
+
+    fn assert_same(result: &SparseTensor, reference: &HashMap<(i64, i64, i64), f64>) {
+        let mut keys = HashSet::new();
+        for i in 0..result.nnz() {
+            assert!(
+                keys.insert((result.rows[i], result.cols[i], result.param_offsets[i])),
+                "duplicate key emitted"
+            );
+            assert_ne!(result.data[i], 0.0, "explicit zero emitted");
+        }
+        let got = accumulate(result);
+        let nonzero: HashMap<_, _> = reference
+            .iter()
+            .filter(|(_, &v)| v != 0.0)
+            .map(|(k, v)| (*k, *v))
+            .collect();
+        assert_eq!(got.len(), nonzero.len());
+        for (k, v) in &nonzero {
+            let g = got.get(k).copied().unwrap_or(f64::NAN);
+            assert!((g - v).abs() < 1e-9, "key {:?}: got {} want {}", k, g, v);
+        }
+    }
+
+    fn output_linop(size: usize) -> LinOp {
+        LinOp {
+            op_type: OpType::Mul,
+            shape: vec![size],
+            args: vec![],
+            data: LinOpData::None,
+        }
+    }
+
+    #[test]
+    fn left_multiply_matches_per_product_reference() {
+        let mut rng = Lcg(7);
+        for trial in 0..40 {
+            let (a_rows, a_cols, k) = (1 + rng.below(5), 1 + rng.below(5), 1 + rng.below(4));
+            let a = random_matrix(&mut rng, a_rows, a_cols);
+            let nnz = 1 + rng.below(30);
+            let tensor = random_tensor(&mut rng, k * a_cols, 4, nnz);
+            let output_rows = k * a_rows;
+            let c = ctx(3);
+            let op = output_linop(output_rows);
+
+            // Reference: kron(I_k, A) applied entry by entry.
+            let mut reference = HashMap::new();
+            for e in 0..tensor.nnz() {
+                let row = tensor.rows[e] as usize;
+                let (block, l) = (row / a_cols, row % a_cols);
+                for i in 0..a_rows {
+                    let key = (
+                        (block * a_rows + i) as i64,
+                        tensor.cols[e],
+                        tensor.param_offsets[e],
+                    );
+                    *reference.entry(key).or_insert(0.0) += a[l * a_rows + i] * tensor.data[e];
+                }
+            }
+
+            let dense = ConstantMatrix::DenseColMajor {
+                data: Arc::from(a.clone()),
+                rows: a_rows,
+                cols: a_cols,
+            };
+            assert_same(
+                &multiply_block_diagonal(&dense, &tensor, &op, &c, false),
+                &reference,
+            );
+
+            let row_major = ConstantMatrix::DenseRowMajor {
+                data: Arc::from(col_major_to_row_major(&a, a_rows, a_cols)),
+                rows: a_rows,
+                cols: a_cols,
+            };
+            assert_same(
+                &multiply_block_diagonal(&row_major, &tensor, &op, &c, false),
+                &reference,
+            );
+
+            let (values, indices, indptr) = to_csc(&a, a_rows, a_cols);
+            let sparse = ConstantMatrix::Sparse {
+                values: Arc::from(values),
+                row_indices: Arc::from(indices),
+                col_indptr: Arc::from(indptr),
+                rows: a_rows,
+                cols: a_cols,
+            };
+            assert_same(
+                &multiply_block_diagonal(&sparse, &tensor, &op, &c, false),
+                &reference,
+            );
+            let _ = trial;
+        }
+    }
+
+    #[test]
+    fn right_multiply_matches_per_product_reference() {
+        let mut rng = Lcg(11);
+        for _ in 0..40 {
+            // X is (k, n), A is (n, p), output vec(X @ A) is k * p.
+            let (k, n, p) = (1 + rng.below(4), 1 + rng.below(5), 1 + rng.below(5));
+            let a = random_matrix(&mut rng, n, p);
+            let nnz = 1 + rng.below(30);
+            let tensor = random_tensor(&mut rng, k * n, 4, nnz);
+            let output_rows = k * p;
+            let c = ctx(3);
+            let op = output_linop(output_rows);
+
+            let mut reference = HashMap::new();
+            for e in 0..tensor.nnz() {
+                let row = tensor.rows[e] as usize;
+                let (i, l) = (row % k, row / k);
+                for j in 0..p {
+                    let key = ((j * k + i) as i64, tensor.cols[e], tensor.param_offsets[e]);
+                    *reference.entry(key).or_insert(0.0) += a[j * n + l] * tensor.data[e];
+                }
+            }
+
+            let dense = ConstantMatrix::DenseColMajor {
+                data: Arc::from(a.clone()),
+                rows: n,
+                cols: p,
+            };
+            assert_same(
+                &multiply_block_diagonal_right(&tensor, &dense, &op, &c),
+                &reference,
+            );
+
+            let row_major = ConstantMatrix::DenseRowMajor {
+                data: Arc::from(col_major_to_row_major(&a, n, p)),
+                rows: n,
+                cols: p,
+            };
+            assert_same(
+                &multiply_block_diagonal_right(&tensor, &row_major, &op, &c),
+                &reference,
+            );
+
+            let (values, indices, indptr) = to_csc(&a, n, p);
+            let sparse = ConstantMatrix::Sparse {
+                values: Arc::from(values),
+                row_indices: Arc::from(indices),
+                col_indptr: Arc::from(indptr),
+                rows: n,
+                cols: p,
+            };
+            assert_same(
+                &multiply_block_diagonal_right(&tensor, &sparse, &op, &c),
+                &reference,
+            );
+        }
     }
 }
