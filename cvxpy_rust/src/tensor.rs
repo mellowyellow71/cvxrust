@@ -385,26 +385,56 @@ impl BuildMatrixResult {
             tensor.rows[i] += tensor.cols[i] * n_rows_i64;
         }
 
-        // Sort entries by flattened row before returning. SciPy's COO->CSC
-        // constructor uses a stable counting sort on the major (param) axis,
-        // so globally row-sorted input keeps rows sorted within every column
-        // and its sort_indices()/sum_duplicates() degrade to linear verify
-        // passes; np.unique in reduce_problem_data_tensor likewise hits its
-        // sorted fast path. Entries often arrive already sorted (single
-        // constraint, identity-like tensors), so check first and skip the
-        // permutation entirely in that case.
+        // Sort entries by (flattened row, param slice) and sum duplicates before
+        // returning. SciPy's COO->CSC constructor uses a stable counting sort on
+        // the major (param) axis, so globally row-sorted input keeps rows sorted
+        // within every column and its sort_indices()/sum_duplicates() degrade to
+        // linear verify passes; np.unique in reduce_problem_data_tensor likewise
+        // hits its sorted fast path. Coalescing here means Python never sees the
+        // duplicates a sum of overlapping affine terms produces (3x the entries
+        // on diag-of-dense-affine problems). Entries often arrive already sorted
+        // and unique (single constraint, identity-like tensors), so check first
+        // and skip the permutation entirely in that case.
         let nnz = tensor.rows.len();
-        let already_sorted = tensor.rows.windows(2).all(|w| w[0] <= w[1]);
-        if !already_sorted {
-            let mut order: Vec<usize> = (0..nnz).collect();
+        let sorted_unique = (1..nnz).all(|i| {
+            let (r0, r1) = (tensor.rows[i - 1], tensor.rows[i]);
+            r0 < r1 || (r0 == r1 && tensor.param_offsets[i - 1] < tensor.param_offsets[i])
+        });
+        if !sorted_unique {
+            // 16-byte records sort far faster than an index array with
+            // indirect key lookups.
+            let mut keys: Vec<(u64, u32, u32)> = (0..nnz)
+                .map(|i| {
+                    (
+                        tensor.rows[i] as u64,
+                        tensor.param_offsets[i] as u32,
+                        i as u32,
+                    )
+                })
+                .collect();
             if nnz < PAR_SORT_MIN_NNZ {
-                order.sort_unstable_by_key(|&i| tensor.rows[i]);
+                keys.sort_unstable();
             } else {
-                order.par_sort_unstable_by_key(|&i| tensor.rows[i]);
+                keys.par_sort_unstable();
             }
-            tensor.data = order.iter().map(|&i| tensor.data[i]).collect();
-            tensor.param_offsets = order.iter().map(|&i| tensor.param_offsets[i]).collect();
-            tensor.rows = order.iter().map(|&i| tensor.rows[i]).collect();
+            let mut data = Vec::with_capacity(nnz);
+            let mut rows = Vec::with_capacity(nnz);
+            let mut params = Vec::with_capacity(nnz);
+            for &(row, param, idx) in &keys {
+                let value = tensor.data[idx as usize];
+                if let (Some(&last_row), Some(&last_param)) = (rows.last(), params.last()) {
+                    if last_row == row as i64 && last_param == param as i64 {
+                        *data.last_mut().unwrap() += value;
+                        continue;
+                    }
+                }
+                data.push(value);
+                rows.push(row as i64);
+                params.push(param as i64);
+            }
+            tensor.data = data;
+            tensor.rows = rows;
+            tensor.param_offsets = params;
         }
 
         BuildMatrixResult {
