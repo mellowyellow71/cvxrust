@@ -1837,7 +1837,7 @@ class TestExpressions(BaseTest):
         x = Variable(2)
         prob = Problem(Minimize(0), [SumNotSupportedInCPP(x) == 1])
 
-        if resolve_default_canon_backend() == cp.CPP_CANON_BACKEND:
+        if resolve_default_canon_backend() in (cp.CPP_CANON_BACKEND, cp.COO_CANON_BACKEND):
             with pytest.warns(
                 UserWarning,
                 match="The problem includes expressions that don't support "
@@ -1846,7 +1846,7 @@ class TestExpressions(BaseTest):
             ):
                 prob.solve()
         else:
-            # A full-coverage default (SCIPY, COO, RUST) is used silently.
+            # A full-coverage default (SCIPY, RUST) is used silently.
             with warnings.catch_warnings():
                 warnings.simplefilter("error")
                 prob.solve()
@@ -1885,13 +1885,13 @@ class TestND_Expressions():
 
     def test_nd_variable_default_backend(self) -> None:
         prob = cp.Problem(self.obj, [self.x == self.target])
-        if resolve_default_canon_backend() == cp.CPP_CANON_BACKEND:
+        if resolve_default_canon_backend() in (cp.CPP_CANON_BACKEND, cp.COO_CANON_BACKEND):
             warning_str = "The problem has an expression with dimension greater than 2. " \
                         "Defaulting to the SCIPY backend for canonicalization."
             with pytest.warns(UserWarning, match=warning_str):
                 prob.solve()
         else:
-            # ND problems use a full-coverage default (SCIPY, COO, RUST) silently.
+            # ND problems use a full-coverage default (SCIPY, RUST) silently.
             with warnings.catch_warnings():
                 warnings.simplefilter("error")
                 prob.solve()
