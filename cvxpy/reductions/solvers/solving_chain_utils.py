@@ -7,10 +7,10 @@ from cvxpy.settings import (
 from cvxpy.utilities.warn import warn
 
 # Backends that lower every LinOp canonicalization emits, including the N-D and
-# broadcast expressions the C++ core rejects.
-_FULL_COVERAGE_BACKENDS = frozenset(
-    {SCIPY_CANON_BACKEND, COO_CANON_BACKEND, RUST_CANON_BACKEND}
-)
+# broadcast expressions the C++ core rejects. COO is not listed: it still fails
+# on N-D sparse constants (see test_atoms.py::test_lambda_sum_largest_nd_solve),
+# so a COO default keeps upstream's SCIPY fallback for those problems.
+_FULL_COVERAGE_BACKENDS = frozenset({SCIPY_CANON_BACKEND, RUST_CANON_BACKEND})
 
 
 def resolve_default_canon_backend() -> str:
@@ -29,7 +29,7 @@ def get_canon_backend(problem, canon_backend: str) -> str:
     Resolve the canonicalization backend for ``problem``.
 
     When no backend is requested and the default is a full-coverage backend
-    (SCIPY, COO or RUST) it is returned as is. Otherwise, if the problem has
+    (SCIPY or RUST) it is returned as is. Otherwise, if the problem has
     expressions of dimension greater than 2 or lacks C++ support, this warns
     and falls back to SCIPY, or raises if 'CPP' was requested explicitly.
 

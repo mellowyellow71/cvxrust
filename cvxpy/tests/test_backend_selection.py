@@ -139,8 +139,8 @@ class TestBackendSelectionFallback:
     """Tests for SCIPY fallback when CPP doesn't work."""
 
     def test_unsupported_cpp_atom_default_backend(self):
-        """CPP-unsupported atoms: a full-coverage default is used silently,
-        a CPP default warns and falls back to SCIPY."""
+        """CPP-unsupported atoms: a full-coverage default (SCIPY, RUST) is used
+        silently; a CPP or COO default warns and falls back to SCIPY."""
         x = cp.Variable((2, 3))
         # broadcast_to doesn't support CPP
         expr = cp.broadcast_to(x, (4, 2, 3))
@@ -150,8 +150,8 @@ class TestBackendSelectionFallback:
         self._assert_default_routing(prob)
 
     def test_ndim_gt_2_default_backend(self):
-        """>2D problems: a full-coverage default is used silently,
-        a CPP default warns and falls back to SCIPY."""
+        """>2D problems: a full-coverage default (SCIPY, RUST) is used silently;
+        a CPP or COO default warns and falls back to SCIPY."""
         x = cp.Variable((2, 3, 4))  # 3D variable
         prob = cp.Problem(cp.Minimize(cp.sum(x)), [x >= 0])
 
@@ -165,7 +165,9 @@ class TestBackendSelectionFallback:
             warnings.simplefilter("always")
             backend = get_canon_backend(prob, None)
 
-        if default == s.CPP_CANON_BACKEND:
+        if default in (s.CPP_CANON_BACKEND, s.COO_CANON_BACKEND):
+            # COO is not full coverage either (N-D sparse constants), so it
+            # keeps the warning-and-SCIPY fallback of upstream.
             assert backend == s.SCIPY_CANON_BACKEND
             assert len(w) == 1
             assert "SCIPY" in str(w[0].message)
