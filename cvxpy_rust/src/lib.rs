@@ -177,7 +177,12 @@ fn test_function() -> String {
 }
 
 /// Python module definition
-#[pymodule]
+///
+/// `gil_used = false`: the module keeps no shared mutable state (every call
+/// builds its own tensors and releases the GIL while doing so; the only
+/// global is a read-once profiling flag), so a free-threaded interpreter
+/// (3.13t/3.14t) does not need to re-enable the GIL on import.
+#[pymodule(gil_used = false)]
 fn cvxpy_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(build_matrix_serialized, m)?)?;

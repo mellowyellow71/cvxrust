@@ -2,6 +2,8 @@
 name = "cvxpy_rust"
 version = "0.1.0"
 edition = "2021"
+# rayon 1.12 needs 1.80; keep in sync with README.md
+rust-version = "1.80"
 license = "Apache-2.0"
 description = "Rust canonicalization backend for CVXPY"
 repository = "https://github.com/cvxpy/cvxpy"

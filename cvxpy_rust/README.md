@@ -22,11 +22,14 @@ The Rust backend is **1.25-1.5x faster** than both the C++and SciPy backends for
 | Sparse matrix (1% density) | ~equal       | ~equal       |
 
 
-The Rust backend is now the **default** for all problems (not just n-dimensional).
+When the extension is built, the Rust backend is the **default** canonicalization backend for every problem
+(`cvxpy.settings.rust_backend_available()` checks for the compiled entry point; without it CVXPY falls
+back to the C++ backend). Wheels built by the release workflow include the extension; a source install
+without a Rust toolchain still works, just without this backend.
 
 ## Building
 
-Requires Rust 1.70+ and maturin.
+Requires Rust 1.80+ (`rustup` recommended; `rust-version` in `Cargo.toml` is the source of truth) and maturin.
 
 ```bash
 cd cvxpy_rust

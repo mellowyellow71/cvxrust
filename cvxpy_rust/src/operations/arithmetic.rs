@@ -10,6 +10,25 @@ use crate::linop::{LinOp, LinOpData};
 use crate::tensor::SparseTensor;
 use std::sync::Arc;
 
+/// The parameter slice of a product of two entries.
+///
+/// At most one factor may depend on a parameter: a product of two
+/// parametric factors is quadratic in the parameters, which DPP forbids and
+/// CVXPY rejects before canonicalization. Reaching it here is a bug, so it
+/// is an error rather than a silently dropped factor.
+#[inline]
+pub(crate) fn combine_params(ctx: &ProcessingContext, a: i64, b: i64) -> i64 {
+    let constant = ctx.const_param();
+    match (a == constant, b == constant) {
+        (true, _) => b,
+        (false, true) => a,
+        (false, false) => panic!(
+            "cvxpy_rust: product of two parametric expressions (parameter slices {} and {}) is not DPP",
+            a, b
+        ),
+    }
+}
+
 /// Process negation operation
 /// Negates all values in the tensor: (A, b) -> (-A, -b)
 pub fn process_neg(lin_op: &LinOp, ctx: &ProcessingContext) -> SparseTensor {
@@ -270,16 +289,8 @@ pub(crate) fn mul_elem_apply(
     }
 
     let const_param = ctx.const_param();
-    // The result param_offset depends on both arg and data params. Both
-    // parametric would need a tensor product of params (unreachable under
-    // DPP); use the data's param, as before.
-    let combine = |arg_param: i64, data_param: i64| -> i64 {
-        if arg_param == const_param || data_param != const_param {
-            data_param
-        } else {
-            arg_param
-        }
-    };
+    let combine =
+        |arg_param: i64, data_param: i64| -> i64 { combine_params(ctx, arg_param, data_param) };
 
     let mut result = SparseTensor::with_capacity(
         (lin_op.size(), ctx.var_length as usize + 1),
@@ -811,7 +822,7 @@ pub(crate) fn mul_const_by_variable(
                     }
                     result
                         .param_offsets
-                        .extend(std::iter::repeat_n(param_offset, a_rows * a_cols));
+                        .extend(std::iter::repeat(param_offset).take(a_rows * a_cols));
                 } else {
                     for c in 0..*a_cols {
                         let out_col = col_base + c as i64;
@@ -1422,17 +1433,7 @@ fn multiply_parametric_left(
                     // Output row: block * a_rows + i
                     let new_row = (block * a_rows + i) as i64;
 
-                    // Determine result param_offset
-                    // If both have non-constant params, we'd need param*param (unsupported)
-                    // Typically, variable is constant-param and A is parametric
-                    let result_param = if rhs_param == ctx.const_param() {
-                        lhs_param
-                    } else if lhs_param == ctx.const_param() {
-                        rhs_param
-                    } else {
-                        // Both parametric - use lhs param (A's param)
-                        lhs_param
-                    };
+                    let result_param = combine_params(ctx, lhs_param, rhs_param);
 
                     result.push(lhs_val * rhs_val, new_row, rhs_col, result_param);
                 }
@@ -1531,15 +1532,7 @@ fn multiply_parametric_right(
                     // Output index in column-major: (X@A)[i, j] at index j * k + i
                     let new_row = (j * k + row_in_X) as i64;
 
-                    // Determine result param_offset
-                    let result_param = if lhs_param == ctx.const_param() {
-                        rhs_param
-                    } else if rhs_param == ctx.const_param() {
-                        lhs_param
-                    } else {
-                        // Both parametric - use rhs param (A's param)
-                        rhs_param
-                    };
+                    let result_param = combine_params(ctx, lhs_param, rhs_param);
 
                     result.push(lhs_val * rhs_val, new_row, lhs_col, result_param);
                 }
