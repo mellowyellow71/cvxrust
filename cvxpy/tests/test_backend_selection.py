@@ -9,6 +9,7 @@ The backend selection priority is:
 
 from __future__ import annotations
 
+import types
 import warnings
 
 import numpy as np
@@ -17,7 +18,10 @@ import pytest
 import cvxpy as cp
 import cvxpy.settings as s
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeMatrixStuffing
-from cvxpy.reductions.solvers.solving_chain_utils import get_canon_backend
+from cvxpy.reductions.solvers.solving_chain_utils import (
+    get_canon_backend,
+    resolve_default_canon_backend,
+)
 
 
 class TestBackendSelectionDPP:
@@ -134,37 +138,42 @@ class TestBackendSelectionUserOverride:
 class TestBackendSelectionFallback:
     """Tests for SCIPY fallback when CPP doesn't work."""
 
-    def test_unsupported_cpp_atom_fallback_to_scipy(self):
-        """Problems with atoms that don't support CPP should fallback to SCIPY."""
+    def test_unsupported_cpp_atom_default_backend(self):
+        """CPP-unsupported atoms: a full-coverage default (SCIPY, RUST) is used
+        silently; a CPP or COO default warns and falls back to SCIPY."""
         x = cp.Variable((2, 3))
         # broadcast_to doesn't support CPP
         expr = cp.broadcast_to(x, (4, 2, 3))
         prob = cp.Problem(cp.Minimize(cp.sum(expr)), [x >= 0])
 
         assert not prob._supports_cpp()
+        self._assert_default_routing(prob)
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            backend = get_canon_backend(prob, None)
-
-        assert backend == s.SCIPY_CANON_BACKEND
-        assert len(w) == 1
-        assert "SCIPY" in str(w[0].message)
-
-    def test_ndim_gt_2_fallback_to_scipy(self):
-        """Problems with >2D expressions should fallback to SCIPY."""
+    def test_ndim_gt_2_default_backend(self):
+        """>2D problems: a full-coverage default (SCIPY, RUST) is used silently;
+        a CPP or COO default warns and falls back to SCIPY."""
         x = cp.Variable((2, 3, 4))  # 3D variable
         prob = cp.Problem(cp.Minimize(cp.sum(x)), [x >= 0])
 
         assert prob._max_ndim() > 2
+        self._assert_default_routing(prob)
 
+    @staticmethod
+    def _assert_default_routing(prob):
+        default = resolve_default_canon_backend()
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             backend = get_canon_backend(prob, None)
 
-        assert backend == s.SCIPY_CANON_BACKEND
-        assert len(w) == 1
-        assert "SCIPY" in str(w[0].message)
+        if default in (s.CPP_CANON_BACKEND, s.COO_CANON_BACKEND):
+            # COO is not full coverage either (N-D sparse constants), so it
+            # keeps the warning-and-SCIPY fallback of upstream.
+            assert backend == s.SCIPY_CANON_BACKEND
+            assert len(w) == 1
+            assert "SCIPY" in str(w[0].message)
+        else:
+            assert backend == default
+            assert len(w) == 0
 
     def test_ndim_gt_2_user_override_respected(self):
         """User-specified COO for >2D problem should be respected."""
@@ -220,3 +229,36 @@ class TestBackendSelectionSolve:
             prob.solve(solver=cp.CLARABEL)
 
         assert prob.status == cp.OPTIMAL
+
+
+class TestRustAvailability:
+    """The RUST default requires the built extension, not just an importable name."""
+
+    @pytest.fixture(autouse=True)
+    def _not_emscripten(self, monkeypatch):
+        monkeypatch.setattr(s.sys, "platform", "linux")
+
+    def test_namespace_package_is_not_available(self, monkeypatch):
+        """A source checkout imports cvxpy_rust/ as an empty namespace package."""
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", types.ModuleType("cvxpy_rust"))
+        assert not s.rust_backend_available()
+        assert s._get_default_canon_backend() == s.CPP_CANON_BACKEND
+
+    def test_missing_module_is_not_available(self, monkeypatch):
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", None)  # forces ImportError
+        assert not s.rust_backend_available()
+        assert s._get_default_canon_backend() == s.CPP_CANON_BACKEND
+
+    def test_built_extension_is_available(self, monkeypatch):
+        stub = types.ModuleType("cvxpy_rust")
+        stub.build_matrix_serialized = lambda *args: None
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", stub)
+        assert s.rust_backend_available()
+        assert s._get_default_canon_backend() == s.RUST_CANON_BACKEND
+
+    def test_explicit_rust_without_extension_raises(self, monkeypatch):
+        monkeypatch.setitem(s.sys.modules, "cvxpy_rust", types.ModuleType("cvxpy_rust"))
+        x = cp.Variable(2)
+        prob = cp.Problem(cp.Minimize(cp.sum(x)), [x >= 1])
+        with pytest.raises(ImportError, match="cvxpy_rust"):
+            prob.get_problem_data(cp.CLARABEL, canon_backend=s.RUST_CANON_BACKEND)

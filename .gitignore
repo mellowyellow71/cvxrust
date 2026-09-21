@@ -69,3 +69,4 @@ cvxpy/_version.py
 
 # uv
 uv.lock
+rust_benchmarks/cvxpy-benchmarks/

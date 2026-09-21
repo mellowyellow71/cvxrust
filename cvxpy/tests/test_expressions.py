@@ -43,6 +43,9 @@ from cvxpy.atoms.affine.wraps import (
 )
 from cvxpy.expressions.constants import Constant, Parameter
 from cvxpy.expressions.variable import Variable
+from cvxpy.reductions.solvers.solving_chain_utils import (
+    resolve_default_canon_backend,
+)
 from cvxpy.tests.base_test import BaseTest
 from cvxpy.utilities.linalg import gershgorin_psd_check
 
@@ -1834,13 +1837,19 @@ class TestExpressions(BaseTest):
         x = Variable(2)
         prob = Problem(Minimize(0), [SumNotSupportedInCPP(x) == 1])
 
-        with pytest.warns(
-            UserWarning,
-            match="The problem includes expressions that don't support "
-            "CPP backend. Defaulting to the SCIPY backend "
-            "for canonicalization.",
-        ):
-            prob.solve()
+        if resolve_default_canon_backend() in (cp.CPP_CANON_BACKEND, cp.COO_CANON_BACKEND):
+            with pytest.warns(
+                UserWarning,
+                match="The problem includes expressions that don't support "
+                "CPP backend. Defaulting to the SCIPY backend "
+                "for canonicalization.",
+            ):
+                prob.solve()
+        else:
+            # A full-coverage default (SCIPY, RUST) is used silently.
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                prob.solve()
 
 
     def test_expr_does_not_support_cpp_error(self):
@@ -1874,16 +1883,23 @@ class TestND_Expressions():
         prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
         assert np.allclose(self.x.value, self.target)
 
-    def test_nd_variable_warning(self) -> None:
+    def test_nd_variable_default_backend(self) -> None:
         prob = cp.Problem(self.obj, [self.x == self.target])
-        warning_str = "The problem has an expression with dimension greater than 2. " \
-                    "Defaulting to the SCIPY backend for canonicalization."
-        with pytest.warns(UserWarning, match=warning_str):
-            prob.solve()
+        if resolve_default_canon_backend() in (cp.CPP_CANON_BACKEND, cp.COO_CANON_BACKEND):
+            warning_str = "The problem has an expression with dimension greater than 2. " \
+                        "Defaulting to the SCIPY backend for canonicalization."
+            with pytest.warns(UserWarning, match=warning_str):
+                prob.solve()
+        else:
+            # ND problems use a full-coverage default (SCIPY, RUST) silently.
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                prob.solve()
+        assert np.allclose(self.x.value, self.target)
 
     def test_nd_variable_value_error(self) -> None:
         prob = cp.Problem(self.obj, [self.x == self.target])
-        error_str = "Only the COO and SCIPY backends are supported " \
+        error_str = "Only the COO, RUST, and SCIPY backends are supported " \
                     "for problems with expressions of dimension greater than 2."
         with pytest.raises(ValueError, match=error_str):
             prob.solve(canon_backend=cp.CPP_CANON_BACKEND)

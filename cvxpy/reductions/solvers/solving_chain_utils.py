@@ -1,17 +1,37 @@
 from cvxpy.settings import (
     COO_CANON_BACKEND,
     CPP_CANON_BACKEND,
+    RUST_CANON_BACKEND,
     SCIPY_CANON_BACKEND,
 )
 from cvxpy.utilities.warn import warn
 
+# Backends that lower every LinOp canonicalization emits, including the N-D and
+# broadcast expressions the C++ core rejects. COO is not listed: it still fails
+# on N-D sparse constants (see test_atoms.py::test_lambda_sum_largest_nd_solve),
+# so a COO default keeps upstream's SCIPY fallback for those problems.
+_FULL_COVERAGE_BACKENDS = frozenset({SCIPY_CANON_BACKEND, RUST_CANON_BACKEND})
+
+
+def resolve_default_canon_backend() -> str:
+    """The backend used when the caller passes ``canon_backend=None``.
+
+    Honors the ``CVXPY_DEFAULT_CANON_BACKEND`` environment variable, then
+    ``settings.DEFAULT_CANON_BACKEND``.
+    """
+    # Local import: canonInterface pulls in the whole backend registry.
+    from cvxpy.cvxcore.python.canonInterface import get_default_canon_backend
+    return get_default_canon_backend()
+
 
 def get_canon_backend(problem, canon_backend: str) -> str:
     """
-    This function checks if the problem has expressions of dimension greater
-    than 2 or if it lacks C++ support, then raises a warning if the default
-    backend is not specified or raises an error if the backend is specified
-    as 'CPP'.
+    Resolve the canonicalization backend for ``problem``.
+
+    When no backend is requested and the default is a full-coverage backend
+    (SCIPY or RUST) it is returned as is. Otherwise, if the problem has
+    expressions of dimension greater than 2 or lacks C++ support, this warns
+    and falls back to SCIPY, or raises if 'CPP' was requested explicitly.
 
     Parameters
     ----------
@@ -27,6 +47,12 @@ def get_canon_backend(problem, canon_backend: str) -> str:
     canon_backend : str
         The canonicalization backend to use.
     """
+
+    if canon_backend is None:
+        default = resolve_default_canon_backend()
+        if default in _FULL_COVERAGE_BACKENDS:
+            # Nothing to fall back from: the default handles every expression.
+            return default
 
     if not problem._supports_cpp():
         if canon_backend is None:
@@ -47,8 +73,8 @@ def get_canon_backend(problem, canon_backend: str) -> str:
             return SCIPY_CANON_BACKEND
         if canon_backend == CPP_CANON_BACKEND:
             raise ValueError(
-                f"Only the {COO_CANON_BACKEND} and {SCIPY_CANON_BACKEND} "
-                f"backends are supported for problems "
+                f"Only the {COO_CANON_BACKEND}, {RUST_CANON_BACKEND}, and "
+                f"{SCIPY_CANON_BACKEND} backends are supported for problems "
                 f"with expressions of dimension greater than 2."
             )
     return canon_backend
